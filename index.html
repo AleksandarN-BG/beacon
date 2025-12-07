@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>Beacon</title>
+  </head>
+  <body>
+    <div class="container" id="container">
+      <!-- Branding -->
+      <div class="branding">
+        <h1>Beacon</h1>
+        <p>When downtime isn't an option.</p>
+      </div>
+
+      <!-- Login Form -->
+      <div class="login-form">
+        <h2>Let's fix this.</h2>
+        <form>
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" placeholder="Enter your email" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="Enter your password" required />
+          </div>
+          <button type="submit" class="btn-login">Sign In</button>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const container = document.getElementById('container');
+      const numEmitters = 3;
+
+      function createEmitter() {
+        const emitter = document.createElement('div');
+        emitter.className = 'circle-emitter';
+
+        // Random position anywhere on the page
+        const x = Math.random() * 100;
+        const y = Math.random() * 100;
+        emitter.style.left = x + '%';
+        emitter.style.top = y + '%';
+
+        // Create 2 circles - outer and inner, animating together
+        for (let i = 0; i < 2; i++) {
+          const circle = document.createElement('div');
+          circle.className = 'circle';
+          emitter.appendChild(circle);
+        }
+
+        container.appendChild(emitter);
+
+        // Remove and recreate at new random position after animation completes
+        setTimeout(() => {
+          emitter.remove();
+          createEmitter();
+        }, 6000);
+      }
+
+      // Create initial emitters with staggered start times
+      for (let i = 0; i < numEmitters; i++) {
+        setTimeout(() => createEmitter(), i * 2000);
+      }
+    </script>
+  </body>
+</html>
