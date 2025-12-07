@@ -1,0 +1,14 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "ACS_CONNECTION_STRING": "<your-acs-connection-string>",
+    "ACS_PHONE_NUMBER": "<your-acs-phone-number>",
+    "COSMOS_CONNECTION_STRING": "<your-cosmos-connection-string>",
+    "COSMOS_DATABASE": "beacon",
+    "COSMOS_CONTAINER_USERS": "users",
+    "COSMOS_CONTAINER_MONITORS": "monitors",
+    "COSMOS_CONTAINER_LOGS": "uptimeLogs"
+  }
+}
+

@@ -1,0 +1,15 @@
+{
+  "name": "beacon-api",
+  "version": "1.0.0",
+  "description": "Azure Functions API for Beacon",
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@azure/communication-sms": "^1.1.0",
+    "@azure/communication-call-automation": "^1.2.0",
+    "@azure/cosmos": "^4.0.0",
+    "uuid": "^9.0.0"
+  }
+}
+
