@@ -24,12 +24,12 @@
     {
       "route": "/api/incidents",
       "methods": ["PUT"],
-      "allowedRoles": ["engineer", "admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/incidents",
       "methods": ["DELETE"],
-      "allowedRoles": ["admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/schedule",
@@ -39,15 +39,15 @@
     {
       "route": "/api/schedule",
       "methods": ["POST", "DELETE"],
-      "allowedRoles": ["engineer", "admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/alert-sms",
-      "allowedRoles": ["admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/alert-call",
-      "allowedRoles": ["admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/users",
@@ -57,7 +57,7 @@
     {
       "route": "/api/users",
       "methods": ["PUT"],
-      "allowedRoles": ["admin"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/api/voice-twiml",

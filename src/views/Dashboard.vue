@@ -400,7 +400,22 @@ async function fetchUser() {
         name: data.clientPrincipal.userDetails,
         provider: data.clientPrincipal.identityProvider
       }
+      
+      // Initially use roles from SWA (Standard Plan)
       userRoles.value = data.clientPrincipal.userRoles || []
+      
+      // Then supplement with roles from our API (Free Plan support)
+      try {
+        const apiResponse = await fetch('/api/users?me=true')
+        if (apiResponse.ok) {
+          const apiUser = await apiResponse.json()
+          if (apiUser && apiUser.roles) {
+            userRoles.value = apiUser.roles
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Failed to fetch augmented roles from API:', apiErr)
+      }
     } else {
       router.push('/')
     }

@@ -37,6 +37,19 @@ module.exports = async function (context, req) {
 
     switch (method) {
       case "GET": {
+        // Support for getting current user's profile with augmented roles
+        if (req.query.me === "true") {
+          context.res = {
+            status: 200,
+            body: {
+              id: currentUser.id,
+              name: currentUser.name,
+              roles: currentUser.roles
+            }
+          };
+          return;
+        }
+
         // Only admins can list all users
         if (!isAdmin) {
           // Non-admins can only get their own info
