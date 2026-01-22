@@ -281,9 +281,9 @@ const currentOnCall = computed(() => {
 watch(showAccountModal, async (isOpen) => {
   if (isOpen) {
     accountSuccess.value = ''
-    // Fetch fresh user data from API
+    // Fetch fresh user data from /api/account
     try {
-      const response = await fetch(`/api/users?id=${user.value.id}`)
+      const response = await fetch('/api/account')
       if (response.ok) {
         const userData = await response.json()
         accountForm.value = {
@@ -311,11 +311,10 @@ async function updateAccount() {
   isSavingAccount.value = true
   accountSuccess.value = ''
   try {
-    const response = await fetch('/api/users', {
+    const response = await fetch('/api/account', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id: user.value.id,
         name: accountForm.value.name,
         phone: accountForm.value.phone,
       }),
