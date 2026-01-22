@@ -26,7 +26,9 @@ module.exports = async function (context, req) {
     // Check Cosmos DB for user roles
     const connectionString = config.cosmos.connectionString;
 
-    if (connectionString) {
+    if (!connectionString) {
+      context.log.warn("COSMOS_CONNECTION_STRING is missing. Using default roles.");
+    } else {
       const databaseId = config.cosmos.database;
       const containerId = config.cosmos.containers.users;
       const client = new CosmosClient(connectionString);
@@ -44,15 +46,15 @@ module.exports = async function (context, req) {
         if (users.length > 0) {
           const user = users[0];
           const userRole = user.role;
+          context.log(`Found existing user ${userId} with role ${userRole}`);
 
           // Add role based on what's in the database
           if (userRole === "admin") {
             roles.push("admin");
-            roles.push("engineer"); // Admins also have engineer privileges
+            roles.push("engineer"); 
           } else if (userRole === "engineer") {
             roles.push("engineer");
           }
-          // "user" is already in roles by default
 
           // Update last login time
           await container.items.upsert({
@@ -72,12 +74,15 @@ module.exports = async function (context, req) {
             lastLogin: new Date().toISOString()
           };
 
-          await container.items.create(newUser);
-          context.log("Created new user:", userId);
+          try {
+            await container.items.create(newUser);
+            context.log(`Created new user record for ${userId} (${userDetails})`);
+          } catch (createError) {
+            context.log.error(`Failed to create user record for ${userId}: ${createError.message}`);
+          }
         }
       } catch (dbError) {
-        // If users container doesn't exist or query fails, just use default roles
-        context.log("Could not query user roles:", dbError.message);
+        context.log.error(`Database error during role retrieval for ${userId}: ${dbError.message}`);
       }
     }
 

@@ -68,6 +68,10 @@
       "allowedRoles": ["anonymous"]
     },
     {
+      "route": "/api/debug",
+      "allowedRoles": ["authenticated"]
+    },
+    {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },
