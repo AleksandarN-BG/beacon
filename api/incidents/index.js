@@ -82,7 +82,7 @@ module.exports = async function (context, req) {
         };
 
         // Trigger alerts based on severity
-        const host = config.system.hostname || req.headers['host'] || 'localhost:7071';
+        const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
         await triggerAlerts(context, newIncident, host);
 
         const { resource: created } = await container.items.create(newIncident);
@@ -238,19 +238,27 @@ async function sendSMS(phone, incident, host) {
   const authToken = config.twilio.authToken;
   const fromNumber = config.twilio.phoneNumber;
 
-  if (!accountSid || !authToken || !fromNumber) return;
+  if (!accountSid || !authToken || !fromNumber) {
+    console.warn("Twilio credentials missing for SMS");
+    return;
+  }
 
   const client = twilio(accountSid, authToken);
   
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const callbackBaseUrl = `${protocol}://${host}`;
 
-  await client.messages.create({
-    body: `Beacon Alert [${incident.severity.toUpperCase()}]: ${incident.title}`,
-    from: fromNumber,
-    to: phone,
-    statusCallback: `${callbackBaseUrl}/api/call-events`
-  });
+  try {
+    const message = await client.messages.create({
+      body: `Beacon Alert [${incident.severity.toUpperCase()}]: ${incident.title}`,
+      from: fromNumber,
+      to: phone,
+      statusCallback: `${callbackBaseUrl}/api/call-events`
+    });
+    console.log(`SMS sent: ${message.sid}`);
+  } catch (err) {
+    console.error(`Failed to send SMS: ${err.message}`);
+  }
 }
 
 async function makeCall(phone, incident, host) {
@@ -259,31 +267,42 @@ async function makeCall(phone, incident, host) {
   const authToken = config.twilio.authToken;
   const fromNumber = config.twilio.phoneNumber;
 
-  if (!accountSid || !authToken || !fromNumber) return;
+  if (!accountSid || !authToken || !fromNumber) {
+    console.warn("Twilio credentials missing for Call");
+    return;
+  }
 
   const client = twilio(accountSid, authToken);
+  const VoiceResponse = twilio.twiml.VoiceResponse;
   
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const callbackBaseUrl = `${protocol}://${host}`;
 
   // Create a TwiML document for the call with acknowledgment
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Gather action="${callbackBaseUrl}/api/voice-twiml?incidentId=${incident.id}" numDigits="1" timeout="10">
-    <Say voice="Polly.Joanna-Generative">
-      Critical Beacon Alert: ${incident.title}. 
-      Press 1 to acknowledge this incident.
-    </Say>
-  </Gather>
-  <Say voice="Polly.Joanna-Generative">We did not receive any input. Goodbye.</Say>
-</Response>`;
-  
-  await client.calls.create({
-    twiml: twiml,
-    to: phone,
-    from: fromNumber,
-    statusCallback: `${callbackBaseUrl}/api/call-events`,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+  const response = new VoiceResponse();
+  const gather = response.gather({
+    action: `${callbackBaseUrl}/api/voice-twiml?incidentId=${incident.id}`,
+    numDigits: '1',
+    timeout: 10
   });
+  
+  gather.say({ voice: 'Polly.Joanna-Generative' }, 
+    `Critical Beacon Alert: ${incident.title}. Press 1 to acknowledge this incident.`
+  );
+  
+  response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive any input. Goodbye.");
+  
+  try {
+    const call = await client.calls.create({
+      twiml: response.toString(),
+      to: phone,
+      from: fromNumber,
+      statusCallback: `${callbackBaseUrl}/api/call-events`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    });
+    console.log(`Call initiated: ${call.sid}`);
+  } catch (err) {
+    console.error(`Failed to initiate call: ${err.message}`);
+  }
 }
 

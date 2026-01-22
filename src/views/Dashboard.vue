@@ -324,15 +324,47 @@ async function reportIncident() {
 }
 
 async function acknowledgeIncident(incident) {
-  incident.status = 'acknowledged'
-  incident.assignedTo = user.value?.name
-  // API call would go here
+  try {
+    const response = await fetch(`/api/incidents?id=${incident.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'acknowledged' })
+    })
+    
+    if (response.ok) {
+      const updated = await response.json()
+      // Update local state with response from server
+      Object.assign(incident, updated)
+    } else {
+      const error = await response.json()
+      alert(`Failed to acknowledge: ${error.error || 'Unknown error'}`)
+    }
+  } catch (err) {
+    console.error('Failed to acknowledge incident:', err)
+    alert('Failed to acknowledge incident. Check console for details.')
+  }
 }
 
 async function resolveIncident(incident) {
-  incident.status = 'resolved'
-  incident.resolvedAt = new Date().toISOString()
-  // API call would go here
+  try {
+    const response = await fetch(`/api/incidents?id=${incident.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'resolved' })
+    })
+    
+    if (response.ok) {
+      const updated = await response.json()
+      // Update local state
+      Object.assign(incident, updated)
+    } else {
+      const error = await response.json()
+      alert(`Failed to resolve: ${error.error || 'Unknown error'}`)
+    }
+  } catch (err) {
+    console.error('Failed to resolve incident:', err)
+    alert('Failed to resolve incident. Check console for details.')
+  }
 }
 
 async function escalateIncident(incident) {
@@ -382,8 +414,22 @@ async function addShift() {
 
 async function deleteShift(id) {
   if (!confirm('Remove this shift?')) return
-  schedule.value = schedule.value.filter(s => s.id !== id)
-  // API call would go here
+  
+  try {
+    const response = await fetch(`/api/schedule?id=${id}`, {
+      method: 'DELETE'
+    })
+    
+    if (response.ok) {
+      schedule.value = schedule.value.filter(s => s.id !== id)
+    } else {
+      const error = await response.json()
+      alert(`Failed to delete shift: ${error.error || 'Unknown error'}`)
+    }
+  } catch (err) {
+    console.error('Failed to delete shift:', err)
+    alert('Failed to delete shift. Check console for details.')
+  }
 }
 
 function logout() {
