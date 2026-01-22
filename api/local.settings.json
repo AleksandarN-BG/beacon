@@ -6,7 +6,7 @@
     "TWILIO_AUTH_TOKEN": "<your-twilio-auth-token>",
     "TWILIO_PHONE_NUMBER": "<your-twilio-phone-number>",
     "COSMOS_CONNECTION_STRING": "<your-cosmos-connection-string>",
-    "COSMOS_DATABASE": "beacon",
+    "COSMOS_DATABASE": "beacondb",
     "COSMOS_CONTAINER_USERS": "users",
     "COSMOS_CONTAINER_INCIDENTS": "incidents",
     "COSMOS_CONTAINER_SCHEDULE": "schedule",
