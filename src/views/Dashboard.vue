@@ -49,6 +49,10 @@
             @click="activeTab = 'incidents'"
         >Incidents</button>
         <button
+            :class="{ active: activeTab === 'archived' }"
+            @click="activeTab = 'archived'"
+        >Archived</button>
+        <button
             :class="{ active: activeTab === 'schedule' }"
             @click="activeTab = 'schedule'"
         >On-Call Schedule</button>
@@ -63,13 +67,13 @@
 
         <div v-if="isLoading" class="loading">Loading incidents...</div>
 
-        <div v-else-if="incidents.length === 0" class="empty-state">
+        <div v-else-if="activeIncidents.length === 0" class="empty-state">
           No incidents reported. That's a good thing!
         </div>
 
         <div v-else class="incidents-list">
           <div
-              v-for="incident in incidents"
+              v-for="incident in activeIncidents"
               :key="incident.id"
               class="incident-card"
               :class="[`severity-${incident.severity}`, { resolved: incident.status === 'resolved' }]"
@@ -85,6 +89,7 @@
             <div class="incident-meta">
               <span>Reported by: {{ incident.reportedBy }}</span>
               <span v-if="incident.assignedTo">Assigned to: {{ incident.assignedTo }}</span>
+              <span v-if="incident.resolvedBy">Resolved by: {{ incident.resolvedBy }}</span>
             </div>
             <div class="incident-actions">
               <button
@@ -102,6 +107,50 @@
               >
                 Resolve
               </button>
+              <button
+                  v-if="incident.status === 'resolved'"
+                  @click="archiveIncident(incident)"
+                  class="btn-archive"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Archived Tab -->
+      <div v-if="activeTab === 'archived'" class="incidents-section">
+        <div class="section-header">
+          <h2>Archived Incidents</h2>
+        </div>
+
+        <div v-if="isLoading" class="loading">Loading archived incidents...</div>
+
+        <div v-else-if="archivedIncidents.length === 0" class="empty-state">
+          No archived incidents.
+        </div>
+
+        <div v-else class="incidents-list">
+          <div
+              v-for="incident in archivedIncidents"
+              :key="incident.id"
+              class="incident-card resolved"
+              :class="`severity-${incident.severity}`"
+          >
+            <div class="incident-header">
+              <span class="severity-badge" :class="incident.severity">
+                {{ incident.severity.toUpperCase() }}
+              </span>
+              <span class="incident-time">{{ formatDate(incident.createdAt) }}</span>
+            </div>
+            <h3>{{ incident.title }}</h3>
+            <p class="incident-description">{{ incident.description }}</p>
+            <div class="incident-meta">
+              <span>Reported by: {{ incident.reportedBy }}</span>
+              <span v-if="incident.assignedTo">Assigned to: {{ incident.assignedTo }}</span>
+              <span v-if="incident.resolvedBy">Resolved by: {{ incident.resolvedBy }}</span>
+              <span v-if="incident.resolvedAt">Resolved: {{ formatDate(incident.resolvedAt) }}</span>
             </div>
           </div>
         </div>
@@ -268,9 +317,11 @@ const accountSuccess = ref('')
 
 const isAdmin = computed(() => userRoles.value.includes('admin'))
 const isEngineer = computed(() => userRoles.value.includes('engineer'))
-const highCount = computed(() => incidents.value.filter(i => i.severity === 'high' && i.status !== 'resolved').length)
-const mediumCount = computed(() => incidents.value.filter(i => i.severity === 'medium' && i.status !== 'resolved').length)
-const resolvedCount = computed(() => incidents.value.filter(i => i.status === 'resolved').length)
+const activeIncidents = computed(() => incidents.value.filter(i => !i.archived))
+const archivedIncidents = computed(() => incidents.value.filter(i => i.archived))
+const highCount = computed(() => activeIncidents.value.filter(i => i.severity === 'high' && i.status !== 'resolved').length)
+const mediumCount = computed(() => activeIncidents.value.filter(i => i.severity === 'medium' && i.status !== 'resolved').length)
+const resolvedCount = computed(() => activeIncidents.value.filter(i => i.status === 'resolved').length)
 
 const currentOnCall = computed(() => {
   const now = new Date()
@@ -462,6 +513,24 @@ async function resolveIncident(incident) {
   }
 }
 
+async function archiveIncident(incident) {
+  if (!confirm('Archive this incident? It will be moved to the Archived tab.')) return
+  try {
+    const response = await fetch(`/api/incidents?id=${incident.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: true })
+    })
+    if (response.ok) {
+      Object.assign(incident, await response.json())
+    } else {
+      alert(`Failed to archive: ${(await response.json()).error || 'Unknown error'}`)
+    }
+  } catch (err) {
+    console.error('Failed to archive incident:', err)
+  }
+}
+
 async function addShift() {
   try {
     const response = await fetch('/api/schedule', {
@@ -597,5 +666,21 @@ onUnmounted(() => {
   color: #4ade80;
   text-align: center;
   font-size: 0.9rem;
+}
+
+.btn-archive {
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: transparent;
+  border: 1px solid #6b7280;
+  color: #9ca3af;
+}
+
+.btn-archive:hover {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: #9ca3af;
 }
 </style>

@@ -79,6 +79,7 @@ module.exports = async function (context, req) {
           reportedById: currentUser?.id,
           assignedTo: null,
           assignedToId: null,
+          archived: false,
           createdAt: new Date().toISOString(),
           acknowledgedAt: null,
           resolvedAt: null
@@ -141,15 +142,26 @@ module.exports = async function (context, req) {
           updatedAt: new Date().toISOString()
         };
 
+        // Look up user's actual name from database
+        const usersContainer = database.container(config.cosmos.containers.users);
+        const { resources: users } = await usersContainer.items
+            .query({
+              query: "SELECT c.id, c.name FROM c WHERE c.id = @userId",
+              parameters: [{ name: "@userId", value: currentUser.id }]
+            })
+            .fetchAll();
+
+        const userName = (users.length > 0 && users[0].name) ? users[0].name : currentUser?.name;
+
         if (req.body.status === "acknowledged" && !existing.acknowledgedAt) {
           updated.acknowledgedAt = new Date().toISOString();
-          updated.assignedTo = currentUser?.name;
+          updated.assignedTo = userName;
           updated.assignedToId = currentUser?.id;
         }
 
         if (req.body.status === "resolved" && !existing.resolvedAt) {
           updated.resolvedAt = new Date().toISOString();
-          updated.resolvedBy = currentUser?.name;
+          updated.resolvedBy = userName;
           updated.resolvedById = currentUser?.id;
         }
 
