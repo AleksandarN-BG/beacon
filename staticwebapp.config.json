@@ -14,7 +14,7 @@
   "routes": [
     {
       "route": "/api/get-roles",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": ["anonymous"]
     },
     {
       "route": "/api/incidents",

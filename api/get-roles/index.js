@@ -3,19 +3,24 @@ const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
-    // Get user ID from the authentication header
+    // Get user principal from header or body
+    let decoded;
     const header = req.headers["x-ms-client-principal"];
+    if (header) {
+      const encoded = Buffer.from(header, "base64");
+      decoded = JSON.parse(encoded.toString("utf8"));
+    } else if (req.body) {
+      decoded = req.body;
+    }
 
-    if (!header) {
+    if (!decoded || !decoded.userId) {
+      context.log("No user principal found in request");
       context.res = {
-        status: 401,
-        body: { error: "Not authenticated" }
+        status: 200,
+        body: { roles: [] }
       };
       return;
     }
-
-    const encoded = Buffer.from(header, "base64");
-    const decoded = JSON.parse(encoded.toString("utf8"));
     const userId = decoded.userId;
     const userDetails = decoded.userDetails; // Username (GitHub) or email (Microsoft)
     const identityProvider = decoded.identityProvider; // "github" or "aad"
