@@ -41,10 +41,10 @@ module.exports = async function (context, req) {
 
     const { phone, service, incidentId } = req.body;
 
-    if (!phone || !service) {
+    if (!phone || !service || !incidentId) {
       context.res = {
         status: 400,
-        body: { error: "Missing required fields: phone, service" }
+        body: { error: "Missing required fields: phone, service, incidentId" }
       };
       return;
     }
@@ -52,28 +52,22 @@ module.exports = async function (context, req) {
     await logger.logSystemEvent(context, 'info', `Initiating escalation call for ${service} to ${phone}`);
 
     const client = twilio(accountSid, authToken);
-    const VoiceResponse = twilio.twiml.VoiceResponse;
 
     const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const callbackBaseUrl = `${protocol}://${host}`;
 
-    const response = new VoiceResponse();
-    const gather = response.gather({
-      action: `${callbackBaseUrl}/api/voice-twiml?incidentId=${incidentId}`,
-      numDigits: '1',
-      timeout: 10
-    });
-    
-    gather.say({ voice: 'Polly.Joanna-Generative' }, 
-      `Critical Beacon Alert: ${service} is experiencing issues. Press 1 to acknowledge this incident.`
-    );
-    
-    response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive any input. Goodbye.");
+    // Construct the message that will be spoken to the user
+    const message = `Critical Beacon Alert: ${service} is experiencing issues. Press 1 to acknowledge this incident.`;
+
+    // The URL for Twilio to fetch TwiML from. We pass the incidentId and the message.
+    const twimlUrl = new URL(`${callbackBaseUrl}/api/voice-twiml`);
+    twimlUrl.searchParams.append('incidentId', incidentId);
+    twimlUrl.searchParams.append('message', message);
 
     try {
       const call = await client.calls.create({
-        twiml: response.toString(),
+        url: twimlUrl.toString(), // Use URL to fetch TwiML
         to: phone,
         from: fromNumber,
         statusCallback: `${callbackBaseUrl}/api/call-events`,

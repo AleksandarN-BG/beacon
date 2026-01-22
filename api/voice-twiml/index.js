@@ -111,11 +111,20 @@ module.exports = async function (context, req) {
       response.say({ voice: 'Polly.Joanna-Generative' }, `You pressed ${digits}. Please try again or check the dashboard.`);
     } else {
       // This might be the initial prompt or a fallback if something is missing
-      await log("No valid digits or incidentId found in request", 'warn');
+      await log("No valid digits or incidentId found in request, gathering input.", 'warn');
       const message = req.query.message || "Beacon Alert System";
-      response.say({ voice: 'Polly.Joanna-Generative' }, message);
-      response.pause({ length: 1 });
-      response.say({ voice: 'Polly.Joanna-Generative' }, "Please refer to the dashboard for more details. Goodbye.");
+      const gather = response.gather({
+          input: 'dtmf',
+          numDigits: 1,
+          action: `/api/voice-twiml?incidentId=${incidentId}`, // Submit back to this function
+          method: 'POST',
+          timeout: 10
+      });
+      gather.say({ voice: 'Polly.Joanna-Generative' }, message);
+      gather.say({ voice: 'Polly.Joanna-Generative' }, "Press 1 to acknowledge.");
+
+      // If the user doesn't press a key, this will be said.
+      response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive a response. Please check the dashboard for more details. Goodbye.");
     }
     
     context.res = {
