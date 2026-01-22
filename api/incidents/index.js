@@ -3,6 +3,8 @@ const { v4: uuidv4 } = require("uuid");
 const config = require("../shared/config");
 const auth = require("../shared/auth");
 const logger = require("../shared/logger");
+const alertSMS = require("../alert-sms");
+const alertCall = require("../alert-call");
 
 module.exports = async function (context, req) {
   try {
@@ -88,7 +90,6 @@ module.exports = async function (context, req) {
         const { resource: created } = await container.items.create(newIncident);
 
         // Trigger alerts based on severity AFTER creating the incident
-        // This runs async - we don't wait for it to complete
         triggerAlerts(context, created, currentUser).catch(err => {
           context.log.error(`Alert triggering failed: ${err.message}`);
         });
@@ -207,6 +208,7 @@ async function triggerAlerts(context, incident, currentUser) {
     const client = new CosmosClient(connectionString);
     const database = client.database(config.cosmos.database);
     const scheduleContainer = database.container(config.cosmos.containers.schedule);
+    const usersContainer = database.container(config.cosmos.containers.users);
 
     const now = new Date().toISOString();
     const { resources: shifts } = await scheduleContainer.items
@@ -221,12 +223,22 @@ async function triggerAlerts(context, incident, currentUser) {
       return;
     }
 
-    const onCall = shifts[0];
+    const shift = shifts[0];
+
+    // Look up the user info just like schedule endpoint does
+    const { resources: users } = await usersContainer.items.query("SELECT c.id, c.name, c.phone FROM c").fetchAll();
+    const userMap = new Map(users.map(u => [u.id, u]));
+    const onCall = userMap.get(shift.userId);
+
+    if (!onCall) {
+      await logger.logSystemEvent(context, 'warn', `User ${shift.userId} not found`);
+      return;
+    }
 
     // NEW 3-LEVEL SEVERITY SYSTEM:
     // Low: Just log (no alerts)
-    // Medium: Send SMS via alert-sms endpoint
-    // High: Send SMS + Make call via alert-call endpoint
+    // Medium: Send SMS
+    // High: Send SMS + Make call
 
     switch (incident.severity) {
       case "low":
@@ -237,14 +249,14 @@ async function triggerAlerts(context, incident, currentUser) {
       case "medium":
         // Send SMS only using existing alert-sms endpoint
         await logger.logSystemEvent(context, 'info', `Medium severity - sending SMS to ${onCall.name}`);
-        await callAlertSMS(onCall.phone, incident.title, currentUser);
+        await callAlertSMS(context, onCall.phone, incident.title, currentUser);
         break;
 
       case "high":
         // Send SMS and make call using existing endpoints
         await logger.logSystemEvent(context, 'info', `High severity - sending SMS and calling ${onCall.name}`);
-        await callAlertSMS(onCall.phone, incident.title, currentUser);
-        await callAlertCall(onCall.phone, incident.title, incident.id, currentUser);
+        await callAlertSMS(context, onCall.phone, incident.title, currentUser);
+        await callAlertCall(context, onCall.phone, incident.title, incident.id, currentUser);
         break;
 
       default:
@@ -255,67 +267,40 @@ async function triggerAlerts(context, incident, currentUser) {
   }
 }
 
-// Helper function to call the alert-sms API internally
-async function callAlertSMS(phone, service, currentUser) {
-  const alertSMS = require('../alert-sms');
-
-  // Create a mock context for the internal call
-  const mockContext = {
-    log: console.log,
-    res: null
-  };
-
-  // Create a mock request with auth already done
+// Call the existing alert-sms module
+async function callAlertSMS(context, phone, service, currentUser) {
   const mockReq = {
     method: 'POST',
-    body: {
-      phone,
-      service,
-      status: 'down' // We're alerting about an issue
-    }
+    body: { phone, service, status: 'down' },
+    headers: context.req.headers || {}
   };
 
-  // Mock the auth so it uses our current user
-  const originalGetUser = require('../shared/auth').getUser;
-  require('../shared/auth').getUser = async () => currentUser;
+  // Temporarily override auth to return current user
+  const originalGetUser = auth.getUser;
+  auth.getUser = async () => currentUser;
 
   try {
-    await alertSMS(mockContext, mockReq);
+    await alertSMS(context, mockReq);
   } finally {
-    // Restore original auth
-    require('../shared/auth').getUser = originalGetUser;
+    auth.getUser = originalGetUser;
   }
 }
 
-// Helper function to call the alert-call API internally
-async function callAlertCall(phone, service, incidentId, currentUser) {
-  const alertCall = require('../alert-call');
-
-  // Create a mock context for the internal call
-  const mockContext = {
-    log: console.log,
-    res: null
-  };
-
-  // Create a mock request with auth already done
+// Call the existing alert-call module
+async function callAlertCall(context, phone, service, incidentId, currentUser) {
   const mockReq = {
     method: 'POST',
-    body: {
-      phone,
-      service,
-      incidentId
-    },
-    headers: {}
+    body: { phone, service, incidentId },
+    headers: context.req.headers || {}
   };
 
-  // Mock the auth so it uses our current user
-  const originalGetUser = require('../shared/auth').getUser;
-  require('../shared/auth').getUser = async () => currentUser;
+  // Temporarily override auth to return current user
+  const originalGetUser = auth.getUser;
+  auth.getUser = async () => currentUser;
 
   try {
-    await alertCall(mockContext, mockReq);
+    await alertCall(context, mockReq);
   } finally {
-    // Restore original auth
-    require('../shared/auth').getUser = originalGetUser;
+    auth.getUser = originalGetUser;
   }
 }
