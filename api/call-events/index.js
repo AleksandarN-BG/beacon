@@ -4,13 +4,15 @@ module.exports = async function (context, req) {
   // Handle call automation events (call connected, call ended, etc.)
   // Twilio sends status callbacks as POST requests with application/x-www-form-urlencoded
   let payload = {};
-  if (req.body) {
-    if (typeof req.body === "string") {
-      payload = qs.parse(req.body);
-    } else if (Buffer.isBuffer(req.body)) {
-      payload = qs.parse(req.body.toString());
-    } else {
-      payload = req.body;
+  const rawBody = req.rawBody || req.body;
+  
+  if (rawBody) {
+    if (typeof rawBody === "string") {
+      payload = qs.parse(rawBody);
+    } else if (Buffer.isBuffer(rawBody)) {
+      payload = qs.parse(rawBody.toString());
+    } else if (typeof rawBody === "object") {
+      payload = rawBody;
     }
   }
   
@@ -20,12 +22,8 @@ module.exports = async function (context, req) {
 
   if (callSid) {
     context.log(`Twilio Call Event: CallSid=${callSid}, Status=${callStatus}`);
-    
-    // You could store this status in a database to track alert delivery
-    // For now, we'll just log it
   } else {
-    // Legacy/Mixed support for other event types if any
-    context.log("Call event received (unknown format):", JSON.stringify(payload));
+    context.log("Call event received with no CallSid:", JSON.stringify(payload));
   }
 
   context.res = {
