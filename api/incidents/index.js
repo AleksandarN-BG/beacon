@@ -33,7 +33,7 @@ module.exports = async function (context, req) {
         };
         return;
       }
-      
+
       context.res = {
         status: 503,
         body: { error: "Database not configured. Please set COSMOS_CONNECTION_STRING in application settings." }
@@ -50,8 +50,8 @@ module.exports = async function (context, req) {
     switch (method) {
       case "GET": {
         const { resources: incidents } = await container.items
-          .query("SELECT * FROM c ORDER BY c.createdAt DESC")
-          .fetchAll();
+            .query("SELECT * FROM c ORDER BY c.createdAt DESC")
+            .fetchAll();
         context.res = { status: 200, body: { incidents } };
         break;
       }
@@ -84,11 +84,15 @@ module.exports = async function (context, req) {
 
         await logger.logSystemEvent(context, 'info', `New incident reported: ${title} (${severity})`);
 
-        // Trigger alerts based on severity
-        const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
-        await triggerAlerts(context, newIncident, host);
-
+        // Create the incident first
         const { resource: created } = await container.items.create(newIncident);
+
+        // Trigger alerts based on severity AFTER creating the incident
+        // This runs async - we don't wait for it to complete
+        triggerAlerts(context, created, currentUser).catch(err => {
+          context.log.error(`Alert triggering failed: ${err.message}`);
+        });
+
         context.res = { status: 201, body: created };
         break;
       }
@@ -191,121 +195,127 @@ module.exports = async function (context, req) {
   }
 };
 
-async function triggerAlerts(context, incident, host) {
+async function triggerAlerts(context, incident, currentUser) {
   // Get current on-call person
   const connectionString = config.cosmos.connectionString;
-  if (!connectionString) return;
+  if (!connectionString) {
+    await logger.logSystemEvent(context, 'warn', 'Cannot trigger alerts: Database not configured');
+    return;
+  }
 
   try {
     const client = new CosmosClient(connectionString);
     const database = client.database(config.cosmos.database);
-    const containerId = config.cosmos.containers.schedule;
-    const scheduleContainer = database.container(containerId);
+    const scheduleContainer = database.container(config.cosmos.containers.schedule);
 
     const now = new Date().toISOString();
     const { resources: shifts } = await scheduleContainer.items
-      .query({
-        query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
-        parameters: [{ name: "@now", value: now }]
-      })
-      .fetchAll();
+        .query({
+          query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
+          parameters: [{ name: "@now", value: now }]
+        })
+        .fetchAll();
 
     if (shifts.length === 0) {
-      context.log("No one currently on-call");
+      await logger.logSystemEvent(context, 'warn', 'No one currently on-call - alerts not sent');
       return;
     }
 
     const onCall = shifts[0];
 
-    // Trigger different actions based on severity
+    // NEW 3-LEVEL SEVERITY SYSTEM:
+    // Low: Just log (no alerts)
+    // Medium: Send SMS via alert-sms endpoint
+    // High: Send SMS + Make call via alert-call endpoint
+
     switch (incident.severity) {
+      case "low":
+        // Just log - no alerts
+        await logger.logSystemEvent(context, 'info', `Low severity incident logged: ${incident.title}`);
+        break;
+
+      case "medium":
+        // Send SMS only using existing alert-sms endpoint
+        await logger.logSystemEvent(context, 'info', `Medium severity - sending SMS to ${onCall.name}`);
+        await callAlertSMS(onCall.phone, incident.title, currentUser);
+        break;
+
       case "high":
-        // Send SMS
-        await sendSMS(onCall.phone, incident, host);
+        // Send SMS and make call using existing endpoints
+        await logger.logSystemEvent(context, 'info', `High severity - sending SMS and calling ${onCall.name}`);
+        await callAlertSMS(onCall.phone, incident.title, currentUser);
+        await callAlertCall(onCall.phone, incident.title, incident.id, currentUser);
         break;
-      case "critical":
-        // Send SMS and make call
-        await sendSMS(onCall.phone, incident, host);
-        await makeCall(onCall.phone, incident, host);
-        break;
-      // low and medium just log
+
+      default:
+        await logger.logSystemEvent(context, 'warn', `Unknown severity: ${incident.severity}`);
     }
   } catch (err) {
-    context.log("Failed to trigger alerts:", err.message);
+    await logger.logSystemEvent(context, 'error', `Failed to trigger alerts: ${err.message}`, err);
   }
 }
 
-async function sendSMS(phone, incident, host) {
-  const twilio = require('twilio');
-  const accountSid = config.twilio.accountSid;
-  const authToken = config.twilio.authToken;
-  const fromNumber = config.twilio.phoneNumber;
+// Helper function to call the alert-sms API internally
+async function callAlertSMS(phone, service, currentUser) {
+  const alertSMS = require('../alert-sms');
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.warn("Twilio credentials missing for SMS");
-    return;
-  }
+  // Create a mock context for the internal call
+  const mockContext = {
+    log: console.log,
+    res: null
+  };
 
-  const client = twilio(accountSid, authToken);
-  
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const callbackBaseUrl = `${protocol}://${host}`;
+  // Create a mock request with auth already done
+  const mockReq = {
+    method: 'POST',
+    body: {
+      phone,
+      service,
+      status: 'down' // We're alerting about an issue
+    }
+  };
+
+  // Mock the auth so it uses our current user
+  const originalGetUser = require('../shared/auth').getUser;
+  require('../shared/auth').getUser = async () => currentUser;
 
   try {
-    const message = await client.messages.create({
-      body: `Beacon Alert [${incident.severity.toUpperCase()}]: ${incident.title}`,
-      from: fromNumber,
-      to: phone,
-      statusCallback: `${callbackBaseUrl}/api/call-events`
-    });
-    console.log(`SMS sent: ${message.sid}`);
-  } catch (err) {
-    console.error(`Failed to send SMS: ${err.message}`);
+    await alertSMS(mockContext, mockReq);
+  } finally {
+    // Restore original auth
+    require('../shared/auth').getUser = originalGetUser;
   }
 }
 
-async function makeCall(phone, incident, host) {
-  const twilio = require('twilio');
-  const accountSid = config.twilio.accountSid;
-  const authToken = config.twilio.authToken;
-  const fromNumber = config.twilio.phoneNumber;
+// Helper function to call the alert-call API internally
+async function callAlertCall(phone, service, incidentId, currentUser) {
+  const alertCall = require('../alert-call');
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.warn("Twilio credentials missing for Call");
-    return;
-  }
+  // Create a mock context for the internal call
+  const mockContext = {
+    log: console.log,
+    res: null
+  };
 
-  const client = twilio(accountSid, authToken);
-  const VoiceResponse = twilio.twiml.VoiceResponse;
-  
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const callbackBaseUrl = `${protocol}://${host}`;
+  // Create a mock request with auth already done
+  const mockReq = {
+    method: 'POST',
+    body: {
+      phone,
+      service,
+      incidentId
+    },
+    headers: {}
+  };
 
-  // Create a TwiML document for the call with acknowledgment
-  const response = new VoiceResponse();
-  const gather = response.gather({
-    action: `${callbackBaseUrl}/api/voice-twiml?incidentId=${incident.id}`,
-    numDigits: '1',
-    timeout: 10
-  });
-  
-  gather.say({ voice: 'Polly.Joanna-Generative' }, 
-    `Critical Beacon Alert: ${incident.title}. Press 1 to acknowledge this incident.`
-  );
-  
-  response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive any input. Goodbye.");
-  
+  // Mock the auth so it uses our current user
+  const originalGetUser = require('../shared/auth').getUser;
+  require('../shared/auth').getUser = async () => currentUser;
+
   try {
-    const call = await client.calls.create({
-      twiml: response.toString(),
-      to: phone,
-      from: fromNumber,
-      statusCallback: `${callbackBaseUrl}/api/call-events`,
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-    });
-    console.log(`Call initiated: ${call.sid}`);
-  } catch (err) {
-    console.error(`Failed to initiate call: ${err.message}`);
+    await alertCall(mockContext, mockReq);
+  } finally {
+    // Restore original auth
+    require('../shared/auth').getUser = originalGetUser;
   }
 }
-

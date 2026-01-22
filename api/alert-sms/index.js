@@ -1,6 +1,7 @@
 const twilio = require('twilio');
 const config = require("../shared/config");
 const auth = require("../shared/auth");
+const logger = require("../shared/logger");
 
 module.exports = async function (context, req) {
   try {
@@ -30,6 +31,7 @@ module.exports = async function (context, req) {
     const fromNumber = config.twilio.phoneNumber;
 
     if (!accountSid || !authToken || !fromNumber) {
+      await logger.logSystemEvent(context, 'error', "Twilio not configured in application settings");
       context.res = {
         status: 500,
         body: { error: "Twilio not configured" }
@@ -47,15 +49,17 @@ module.exports = async function (context, req) {
       return;
     }
 
+    await logger.logSystemEvent(context, 'info', `Sending SMS alert for ${service} to ${phone}`);
+
     const client = twilio(accountSid, authToken);
 
-    const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
-    const protocol = host && host.includes('localhost') ? 'http' : 'https';
-    const callbackBaseUrl = host ? `${protocol}://${host}` : null;
+    // Use Static Web App URL for callbacks
+    const staticWebAppUrl = config.system.staticWebAppUrl || process.env.STATIC_WEB_APP_URL;
+    const callbackBaseUrl = staticWebAppUrl || null;
 
     const message = status === "up"
-      ? `Beacon Alert: ${service} is back UP`
-      : `Beacon Alert: ${service} is DOWN`;
+        ? `Beacon Alert: ${service} is back UP`
+        : `Beacon Alert: ${service} is DOWN`;
 
     try {
       const messageResponse = await client.messages.create({
@@ -65,12 +69,18 @@ module.exports = async function (context, req) {
         statusCallback: callbackBaseUrl ? `${callbackBaseUrl}/api/call-events` : undefined
       });
 
+      await logger.logSystemEvent(context, 'info', `SMS sent successfully: ${messageResponse.sid}`);
+
       context.res = {
         status: 200,
-        body: { success: true, messageId: messageResponse.sid, status: messageResponse.status }
+        body: {
+          success: true,
+          messageId: messageResponse.sid,
+          status: messageResponse.status
+        }
       };
     } catch (err) {
-      context.log.error(`Twilio SMS Error: ${err.message}`);
+      await logger.logSystemEvent(context, 'error', `Twilio SMS error: ${err.message}`, err);
       throw err;
     }
   } catch (error) {
@@ -81,4 +91,3 @@ module.exports = async function (context, req) {
     };
   }
 };
-

@@ -29,12 +29,12 @@
           <span class="stat-label">Total Incidents</span>
         </div>
         <div class="stat stat-critical">
-          <span class="stat-value">{{ criticalCount }}</span>
-          <span class="stat-label">Critical</span>
+          <span class="stat-value">{{ highCount }}</span>
+          <span class="stat-label">High</span>
         </div>
         <div class="stat stat-warning">
-          <span class="stat-value">{{ warningCount }}</span>
-          <span class="stat-label">Warning</span>
+          <span class="stat-value">{{ mediumCount }}</span>
+          <span class="stat-label">Medium</span>
         </div>
         <div class="stat stat-up">
           <span class="stat-value">{{ resolvedCount }}</span>
@@ -45,12 +45,12 @@
       <!-- Tabs -->
       <div class="tabs">
         <button
-          :class="{ active: activeTab === 'incidents' }"
-          @click="activeTab = 'incidents'"
+            :class="{ active: activeTab === 'incidents' }"
+            @click="activeTab = 'incidents'"
         >Incidents</button>
         <button
-          :class="{ active: activeTab === 'schedule' }"
-          @click="activeTab = 'schedule'"
+            :class="{ active: activeTab === 'schedule' }"
+            @click="activeTab = 'schedule'"
         >On-Call Schedule</button>
       </div>
 
@@ -69,10 +69,10 @@
 
         <div v-else class="incidents-list">
           <div
-            v-for="incident in incidents"
-            :key="incident.id"
-            class="incident-card"
-            :class="[`severity-${incident.severity}`, { resolved: incident.status === 'resolved' }]"
+              v-for="incident in incidents"
+              :key="incident.id"
+              class="incident-card"
+              :class="[`severity-${incident.severity}`, { resolved: incident.status === 'resolved' }]"
           >
             <div class="incident-header">
               <span class="severity-badge" :class="incident.severity">
@@ -88,26 +88,19 @@
             </div>
             <div class="incident-actions">
               <button
-                v-if="(isEngineer || isAdmin) && incident.status !== 'resolved'"
-                @click="acknowledgeIncident(incident)"
-                class="btn-ack"
-                :disabled="incident.status === 'acknowledged'"
+                  v-if="(isEngineer || isAdmin) && incident.status !== 'resolved'"
+                  @click="acknowledgeIncident(incident)"
+                  class="btn-ack"
+                  :disabled="incident.status === 'acknowledged'"
               >
                 {{ incident.status === 'acknowledged' ? 'Acknowledged' : 'Acknowledge' }}
               </button>
               <button
-                v-if="incident.status !== 'resolved'"
-                @click="resolveIncident(incident)"
-                class="btn-resolve"
+                  v-if="incident.status !== 'resolved'"
+                  @click="resolveIncident(incident)"
+                  class="btn-resolve"
               >
                 Resolve
-              </button>
-              <button
-                v-if="isAdmin && incident.status !== 'resolved'"
-                @click="escalateIncident(incident)"
-                class="btn-escalate"
-              >
-                Escalate
               </button>
             </div>
           </div>
@@ -123,10 +116,10 @@
 
         <div class="schedule-list">
           <div
-            v-for="shift in schedule"
-            :key="shift.id"
-            class="schedule-card"
-            :class="{ 'current-shift': isCurrentShift(shift) }"
+              v-for="shift in schedule"
+              :key="shift.id"
+              class="schedule-card"
+              :class="{ 'current-shift': isCurrentShift(shift) }"
           >
             <div class="shift-person">{{ shift.name }}</div>
             <div class="shift-time">
@@ -134,9 +127,9 @@
             </div>
             <div class="shift-contact">{{ shift.phone }}</div>
             <button
-              v-if="isAdmin || (isEngineer && canManageShift(shift))"
-              @click="deleteShift(shift.id)"
-              class="btn-delete-small"
+                v-if="isAdmin || (isEngineer && canManageShift(shift))"
+                @click="deleteShift(shift.id)"
+                class="btn-delete-small"
             >Remove</button>
           </div>
         </div>
@@ -159,20 +152,20 @@
           <div class="form-group">
             <label>Severity</label>
             <select v-model="newIncident.severity" required>
-              <option value="low">Low - Minor issue, no immediate action needed</option>
-              <option value="medium">Medium - Degraded service, needs attention</option>
-              <option value="high">High - Major issue, urgent response needed</option>
-              <option value="critical">Critical - Complete outage, immediate action required</option>
+              <option value="low">Low - Minor issue, logged for review</option>
+              <option value="medium">Medium - Degraded service, SMS alert sent</option>
+              <option value="high">High - Critical issue, on-call engineer called immediately</option>
             </select>
           </div>
           <div class="severity-actions" v-if="newIncident.severity">
             <p class="action-label">Actions that will be taken:</p>
             <ul>
-              <li v-if="newIncident.severity === 'low'">Log incident for review</li>
-              <li v-if="newIncident.severity === 'medium'">Notify on-call via email</li>
-              <li v-if="newIncident.severity === 'high'">Send SMS to on-call engineer</li>
-              <li v-if="newIncident.severity === 'critical'">Call on-call engineer immediately</li>
-              <li v-if="newIncident.severity === 'critical'">Notify backup on-call if no response</li>
+              <li v-if="newIncident.severity === 'low'">✓ Incident logged for review</li>
+              <li v-if="newIncident.severity === 'medium'">✓ Incident logged</li>
+              <li v-if="newIncident.severity === 'medium'">✓ SMS sent to on-call engineer</li>
+              <li v-if="newIncident.severity === 'high'">✓ Incident logged</li>
+              <li v-if="newIncident.severity === 'high'">✓ SMS sent to on-call engineer</li>
+              <li v-if="newIncident.severity === 'high'">✓ Voice call placed to on-call engineer</li>
             </ul>
           </div>
           <div class="modal-actions">
@@ -234,8 +227,8 @@ const newShift = ref({ userId: '', startTime: '', endTime: '' })
 
 const isAdmin = computed(() => userRoles.value.includes('admin'))
 const isEngineer = computed(() => userRoles.value.includes('engineer'))
-const criticalCount = computed(() => incidents.value.filter(i => i.severity === 'critical' && i.status !== 'resolved').length)
-const warningCount = computed(() => incidents.value.filter(i => (i.severity === 'high' || i.severity === 'medium') && i.status !== 'resolved').length)
+const highCount = computed(() => incidents.value.filter(i => i.severity === 'high' && i.status !== 'resolved').length)
+const mediumCount = computed(() => incidents.value.filter(i => i.severity === 'medium' && i.status !== 'resolved').length)
 const resolvedCount = computed(() => incidents.value.filter(i => i.status === 'resolved').length)
 
 const currentOnCall = computed(() => {
@@ -315,7 +308,15 @@ async function reportIncident() {
       body: JSON.stringify(incident)
     })
     if (response.ok) {
-      incidents.value.unshift(await response.json())
+      const created = await response.json()
+      incidents.value.unshift(created)
+
+      // Show confirmation based on severity
+      if (incident.severity === 'high') {
+        alert(`High severity incident reported. On-call engineer has been called.`)
+      } else if (incident.severity === 'medium') {
+        alert(`Medium severity incident reported. On-call engineer has been notified via SMS.`)
+      }
     }
     showIncidentModal.value = false
     newIncident.value = { title: '', description: '', severity: 'medium' }
@@ -355,27 +356,6 @@ async function resolveIncident(incident) {
     }
   } catch (err) {
     console.error('Failed to resolve incident:', err)
-  }
-}
-
-async function escalateIncident(incident) {
-  if (currentOnCall.value) {
-    try {
-      await fetch('/api/alert-call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: currentOnCall.value.phone,
-          service: incident.title,
-          incidentId: incident.id
-        })
-      })
-      alert('Escalation call initiated to ' + currentOnCall.value.name)
-    } catch (err) {
-      console.error('Failed to escalate:', err)
-    }
-  } else {
-    alert('No one is currently on-call')
   }
 }
 
@@ -429,7 +409,7 @@ async function fetchUser() {
         provider: data.clientPrincipal.identityProvider
       }
       userRoles.value = data.clientPrincipal.userRoles || []
-      
+
       try {
         const apiResponse = await fetch('/api/users?me=true')
         if (apiResponse.ok) {
