@@ -2,28 +2,19 @@ const { CosmosClient } = require("@azure/cosmos");
 const qs = require("querystring");
 const twilio = require("twilio");
 const config = require("../shared/config");
+const logger = require("../shared/logger");
 
 module.exports = async function (context, req) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
 
-  // Helper to log both to context and console for maximum visibility
-  const log = (msg, level = 'info') => {
-    const formattedMsg = `[VoiceTwiML] ${msg}`;
-    if (level === 'error') {
-      context.log.error(formattedMsg);
-      console.error(formattedMsg);
-    } else if (level === 'warn') {
-      context.log.warn(formattedMsg);
-      console.warn(formattedMsg);
-    } else {
-      context.log(formattedMsg);
-      console.log(formattedMsg);
-    }
+  // Helper to log both to context, console, and System Logs for dashboard visibility
+  const log = async (msg, level = 'info', details = null) => {
+    await logger.logSystemEvent(context, level, msg, details);
   };
 
   try {
-    log(`Request Method: ${req.method}`);
+    await log(`Voice request received: ${req.method}`, 'info');
     
     // Twilio sends data as application/x-www-form-urlencoded
     let body = {};
@@ -44,7 +35,7 @@ module.exports = async function (context, req) {
     // Twilio Digits is usually in the body for the 'action' callback of a <Gather>
     const digits = body.Digits || req.query.Digits;
 
-    log(`Extracted: incidentId=${incidentId}, digits=${digits}`);
+    await log(`Extracted: incidentId=${incidentId}, digits=${digits}`);
     
     // If it's a GET, it might just be a manual check or a heartbeat
     if (req.method === 'GET' && !digits) {
@@ -54,33 +45,32 @@ module.exports = async function (context, req) {
     }
 
     if (digits === "1" && incidentId) {
-      log(`Attempting to acknowledge incident: ${incidentId}`);
+      await log(`Attempting to acknowledge incident: ${incidentId}`);
       const connectionString = config.cosmos.connectionString;
       if (!connectionString) {
-        log("Missing COSMOS_CONNECTION_STRING", 'error');
+        await log("Missing COSMOS_CONNECTION_STRING", 'error');
         response.say({ voice: 'Polly.Joanna-Generative' }, "System configuration error. Connection string missing.");
-        console.error("[VoiceTwiML] Missing COSMOS_CONNECTION_STRING");
       } else {
         try {
           const client = new CosmosClient(connectionString);
           const database = client.database(config.cosmos.database);
           const incidentContainer = database.container(config.cosmos.containers.incidents);
           const scheduleContainer = database.container(config.cosmos.containers.schedule);
-          log(`Reading item ${incidentId} from container: ${config.cosmos.containers.incidents}`);
-          console.log(`[VoiceTwiML] Reading incident: ${incidentId}`);
+          
+          await log(`Reading incident ${incidentId}`);
           const { resource: existing } = await incidentContainer.item(incidentId, incidentId).read();
+          
           if (existing) {
             if (!existing.acknowledgedAt) {
               // Find current on-call engineer from schedule
               const now = new Date().toISOString();
-              console.log(`[VoiceTwiML] Querying schedule for now: ${now}`);
               const { resources: shifts } = await scheduleContainer.items
                 .query({
                   query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
                   parameters: [{ name: "@now", value: now }]
                 })
                 .fetchAll();
-              console.log(`[VoiceTwiML] Found shifts:`, shifts);
+              
               let assignedTo = "Unknown";
               let assignedToId = null;
               let assignedToPhone = null;
@@ -99,33 +89,29 @@ module.exports = async function (context, req) {
                 assignedToId,
                 assignedToPhone
               };
-              console.log(`[VoiceTwiML] Updating incident:`, updated);
+              
               await incidentContainer.item(incidentId, incidentId).replace(updated);
-              log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
-              console.log(`[VoiceTwiML] Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
+              await log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
               response.say({ voice: 'Polly.Joanna-Generative' }, `Thank you ${assignedTo}. The incident has been acknowledged. Goodbye.`);
             } else {
-              log(`Incident ${incidentId} was already acknowledged`);
-              console.log(`[VoiceTwiML] Incident ${incidentId} was already acknowledged`);
+              await log(`Incident ${incidentId} was already acknowledged`, 'warn');
               response.say({ voice: 'Polly.Joanna-Generative' }, "This incident has already been acknowledged. Thank you, goodbye.");
             }
           } else {
-            log(`Incident not found: ${incidentId}`, 'warn');
-            console.warn(`[VoiceTwiML] Incident not found: ${incidentId}`);
+            await log(`Incident not found: ${incidentId}`, 'warn');
             response.say({ voice: 'Polly.Joanna-Generative' }, "I'm sorry, I couldn't find that incident in our records.");
           }
         } catch (dbError) {
-          log(`Database error: ${dbError.message}`, 'error');
-          console.error(`[VoiceTwiML] Database error:`, dbError);
+          await log(`Database error: ${dbError.message}`, 'error', dbError);
           response.say({ voice: 'Polly.Joanna-Generative' }, "There was a database error while acknowledging the incident. Please use the dashboard.");
         }
       }
     } else if (digits && digits !== "1") {
-      log(`Received unexpected digits: ${digits}`);
+      await log(`Received unexpected digits: ${digits}`);
       response.say({ voice: 'Polly.Joanna-Generative' }, `You pressed ${digits}. Please try again or check the dashboard.`);
     } else {
       // This might be the initial prompt or a fallback if something is missing
-      log("No valid digits or incidentId found in request");
+      await log("No valid digits or incidentId found in request", 'warn');
       const message = req.query.message || "Beacon Alert System";
       response.say({ voice: 'Polly.Joanna-Generative' }, message);
       response.pause({ length: 1 });
@@ -138,14 +124,25 @@ module.exports = async function (context, req) {
       body: response.toString()
     };
   } catch (error) {
-    log(`Top-level error: ${error.message}`, 'error');
-    console.error(`[VoiceTwiML] Top-level error:`, error);
-    const errorResponse = new VoiceResponse();
-    errorResponse.say({ voice: 'Polly.Joanna-Generative' }, "We're sorry, an internal error occurred while processing this call.");
-    context.res = {
-      status: 200,
-      headers: { 'Content-Type': 'text/xml' },
-      body: errorResponse.toString()
-    };
+    try {
+      const safeMsg = (error && error.message) ? error.message.replace(/[^a-zA-Z0-9 .,:;\-]/g, " ") : "Unknown error";
+      await log(`Top-level error: ${safeMsg}`, 'error', error);
+      
+      const errorResponse = new VoiceResponse();
+      errorResponse.say({ voice: 'Polly.Joanna-Generative' }, `Internal error: ${safeMsg}`);
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+        body: errorResponse.toString()
+      };
+    } catch (fatal) {
+      // Final fallback: always return valid TwiML
+      context.log.error(`[VoiceTwiML] Fatal error in error handler: ${fatal && fatal.message}`);
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+        body: '<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Joanna-Generative">A fatal error occurred in the voice handler. Please check the logs.</Say></Response>'
+      };
+    }
   }
 };

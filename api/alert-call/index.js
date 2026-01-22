@@ -1,6 +1,7 @@
 const twilio = require('twilio');
 const config = require("../shared/config");
 const auth = require("../shared/auth");
+const logger = require("../shared/logger");
 
 module.exports = async function (context, req) {
   try {
@@ -30,6 +31,7 @@ module.exports = async function (context, req) {
     const fromNumber = config.twilio.phoneNumber;
 
     if (!accountSid || !authToken || !fromNumber) {
+      await logger.logSystemEvent(context, 'error', "Twilio not configured in application settings");
       context.res = {
         status: 500,
         body: { error: "Twilio not configured" }
@@ -46,6 +48,8 @@ module.exports = async function (context, req) {
       };
       return;
     }
+
+    await logger.logSystemEvent(context, 'info', `Initiating escalation call for ${service} to ${phone}`);
 
     const client = twilio(accountSid, authToken);
     const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -67,27 +71,37 @@ module.exports = async function (context, req) {
     
     response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive any input. Goodbye.");
 
-    const call = await client.calls.create({
-      twiml: response.toString(),
-      to: phone,
-      from: fromNumber,
-      statusCallback: `${callbackBaseUrl}/api/call-events`,
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-    });
+    try {
+      const call = await client.calls.create({
+        twiml: response.toString(),
+        to: phone,
+        from: fromNumber,
+        statusCallback: `${callbackBaseUrl}/api/call-events`,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+      });
 
-    context.res = {
-      status: 200,
-      body: {
-        success: true,
-        callSid: call.sid
-      }
-    };
+      await logger.logSystemEvent(context, 'info', `Call initiated successfully: ${call.sid}`);
+
+      context.res = {
+        status: 200,
+        body: {
+          success: true,
+          callSid: call.sid
+        }
+      };
+    } catch (err) {
+      await logger.logSystemEvent(context, 'error', `Twilio API error during call creation: ${err.message}`, err);
+      throw err;
+    }
   } catch (error) {
     context.log.error(`Error initiating call: ${error.message}`);
+    // Return error details in the response for browser debugging
     context.res = {
       status: 500,
-      body: { error: error.message }
+      body: {
+        error: error.message,
+        stack: error.stack // Include stack trace for debugging
+      }
     };
   }
 };
-

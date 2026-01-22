@@ -214,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -225,6 +225,7 @@ const incidents = ref([])
 const schedule = ref([])
 const isLoading = ref(true)
 const activeTab = ref('incidents')
+const lastLogTimestamp = ref(new Date().toISOString())
 const showIncidentModal = ref(false)
 const showScheduleModal = ref(false)
 
@@ -462,6 +463,11 @@ async function fetchUser() {
       } catch (apiErr) {
         console.warn('Failed to fetch augmented roles from API:', apiErr)
       }
+
+      // Start log polling for admins/engineers
+      if (isAdmin.value || isEngineer.value) {
+        startLogPolling()
+      }
     } else {
       router.push('/')
     }
@@ -470,10 +476,54 @@ async function fetchUser() {
   }
 }
 
+let logPollingInterval = null;
+function startLogPolling() {
+  if (logPollingInterval) return;
+  
+  // Poll every 10 seconds
+  logPollingInterval = setInterval(fetchLogs, 10000);
+  fetchLogs(); // Initial fetch
+}
+
+async function fetchLogs() {
+  try {
+    const response = await fetch('/api/logs')
+    if (response.ok) {
+      const data = await response.json()
+      const newLogs = data.logs.filter(log => log.timestamp > lastLogTimestamp.value)
+      
+      if (newLogs.length > 0) {
+        newLogs.reverse().forEach(log => {
+          const time = new Date(log.timestamp).toLocaleTimeString()
+          const msg = `[${log.source}] ${log.message}`
+          
+          if (log.level === 'error') {
+            console.error(`BEACON ERROR [${time}]: ${msg}`, log.details || '')
+          } else if (log.level === 'warn') {
+            console.warn(`BEACON WARN [${time}]: ${msg}`, log.details || '')
+          } else {
+            console.log(`BEACON INFO [${time}]: ${msg}`)
+          }
+        })
+        
+        lastLogTimestamp.value = data.logs[0].timestamp
+      }
+    }
+  } catch (err) {
+    // Quietly fail log polling
+  }
+}
+
 onMounted(() => {
   fetchUser()
   fetchIncidents()
   fetchSchedule()
+})
+
+onUnmounted(() => {
+  if (logPollingInterval) {
+    clearInterval(logPollingInterval)
+  }
 })
 </script>
 

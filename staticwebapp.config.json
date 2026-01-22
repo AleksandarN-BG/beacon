@@ -72,6 +72,10 @@
       "allowedRoles": ["authenticated"]
     },
     {
+      "route": "/api/logs",
+      "allowedRoles": ["authenticated"]
+    },
+    {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },

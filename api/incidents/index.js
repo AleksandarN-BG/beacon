@@ -2,6 +2,7 @@ const { CosmosClient } = require("@azure/cosmos");
 const { v4: uuidv4 } = require("uuid");
 const config = require("../shared/config");
 const auth = require("../shared/auth");
+const logger = require("../shared/logger");
 
 module.exports = async function (context, req) {
   try {
@@ -80,6 +81,8 @@ module.exports = async function (context, req) {
           acknowledgedAt: null,
           resolvedAt: null
         };
+
+        await logger.logSystemEvent(context, 'info', `New incident reported: ${title} (${severity})`);
 
         // Trigger alerts based on severity
         const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
