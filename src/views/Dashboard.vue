@@ -118,7 +118,7 @@
       <div v-if="activeTab === 'schedule'" class="schedule-section">
         <div class="section-header">
           <h2>On-Call Schedule</h2>
-          <button v-if="isAdmin || isEngineer" @click="showScheduleModal = true" class="btn-add">+ Add Shift</button>
+          <button v-if="isAdmin || isEngineer" @click="openScheduleModal" class="btn-add">+ Add Shift</button>
         </div>
 
         <div class="schedule-list">
@@ -189,12 +189,10 @@
         <h3>Add On-Call Shift</h3>
         <form @submit.prevent="addShift">
           <div class="form-group">
-            <label>Name</label>
-            <input v-model="newShift.name" placeholder="John Doe" required />
-          </div>
-          <div class="form-group">
-            <label>Phone</label>
-            <input v-model="newShift.phone" placeholder="+1234567890" required />
+            <label>Engineer</label>
+            <select v-model="newShift.userId" required :disabled="!isAdmin">
+              <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Start Time</label>
@@ -221,6 +219,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const user = ref(null)
+const users = ref([])
 const userRoles = ref([])
 const incidents = ref([])
 const schedule = ref([])
@@ -231,7 +230,7 @@ const showIncidentModal = ref(false)
 const showScheduleModal = ref(false)
 
 const newIncident = ref({ title: '', description: '', severity: 'medium' })
-const newShift = ref({ name: '', phone: '', startTime: '', endTime: '' })
+const newShift = ref({ userId: '', startTime: '', endTime: '' })
 
 const isAdmin = computed(() => userRoles.value.includes('admin'))
 const isEngineer = computed(() => userRoles.value.includes('engineer'))
@@ -245,8 +244,7 @@ const currentOnCall = computed(() => {
 })
 
 function canManageShift(shift) {
-  // Engineers can only manage their own shifts
-  return shift.userId === user.value?.id || shift.name === user.value?.name
+  return shift.userId === user.value?.id
 }
 
 function formatDate(dateStr) {
@@ -262,16 +260,10 @@ async function fetchIncidents() {
   try {
     const response = await fetch('/api/incidents')
     if (response.ok) {
-      const data = await response.json()
-      incidents.value = data.incidents || []
+      incidents.value = (await response.json()).incidents || []
     }
   } catch (err) {
     console.error('Failed to fetch incidents:', err)
-    // Mock data for demo
-    incidents.value = [
-      { id: '1', title: 'Database connection timeout', description: 'Users experiencing slow queries', severity: 'high', status: 'open', reportedBy: 'System', createdAt: new Date().toISOString() },
-      { id: '2', title: 'SSL certificate expiring', description: 'Certificate expires in 7 days', severity: 'medium', status: 'acknowledged', reportedBy: 'Monitor', assignedTo: 'John', createdAt: new Date().toISOString() }
-    ]
   } finally {
     isLoading.value = false
   }
@@ -281,18 +273,32 @@ async function fetchSchedule() {
   try {
     const response = await fetch('/api/schedule')
     if (response.ok) {
-      const data = await response.json()
-      schedule.value = data.schedule || []
+      schedule.value = (await response.json()).schedule || []
     }
   } catch (err) {
     console.error('Failed to fetch schedule:', err)
-    // Mock data for demo
-    const now = new Date()
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-    schedule.value = [
-      { id: '1', name: 'Alice Smith', phone: '+1234567890', startTime: now.toISOString(), endTime: tomorrow.toISOString() }
-    ]
   }
+}
+
+async function fetchAllUsers() {
+  if (!isAdmin.value) return;
+  try {
+    const response = await fetch('/api/users');
+    if (response.ok) {
+      users.value = (await response.json()).users || [];
+    }
+  } catch (err) {
+    console.error('Failed to fetch users:', err);
+  }
+}
+
+function openScheduleModal() {
+  if (isAdmin.value) {
+    newShift.value = { userId: '', startTime: '', endTime: '' };
+  } else if (isEngineer.value) {
+    newShift.value = { userId: user.value.id, startTime: '', endTime: '' };
+  }
+  showScheduleModal.value = true;
 }
 
 async function reportIncident() {
@@ -303,21 +309,14 @@ async function reportIncident() {
       status: 'open',
       createdAt: new Date().toISOString()
     }
-
     const response = await fetch('/api/incidents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(incident)
     })
-
     if (response.ok) {
-      const created = await response.json()
-      incidents.value.unshift(created)
-    } else {
-      // Add locally for demo
-      incidents.value.unshift({ ...incident, id: Date.now().toString() })
+      incidents.value.unshift(await response.json())
     }
-
     showIncidentModal.value = false
     newIncident.value = { title: '', description: '', severity: 'medium' }
   } catch (err) {
@@ -332,18 +331,13 @@ async function acknowledgeIncident(incident) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'acknowledged' })
     })
-    
     if (response.ok) {
-      const updated = await response.json()
-      // Update local state with response from server
-      Object.assign(incident, updated)
+      Object.assign(incident, await response.json())
     } else {
-      const error = await response.json()
-      alert(`Failed to acknowledge: ${error.error || 'Unknown error'}`)
+      alert(`Failed to acknowledge: ${(await response.json()).error || 'Unknown error'}`)
     }
   } catch (err) {
     console.error('Failed to acknowledge incident:', err)
-    alert('Failed to acknowledge incident. Check console for details.')
   }
 }
 
@@ -354,18 +348,13 @@ async function resolveIncident(incident) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'resolved' })
     })
-    
     if (response.ok) {
-      const updated = await response.json()
-      // Update local state
-      Object.assign(incident, updated)
+      Object.assign(incident, await response.json())
     } else {
-      const error = await response.json()
-      alert(`Failed to resolve: ${error.error || 'Unknown error'}`)
+      alert(`Failed to resolve: ${(await response.json()).error || 'Unknown error'}`)
     }
   } catch (err) {
     console.error('Failed to resolve incident:', err)
-    alert('Failed to resolve incident. Check console for details.')
   }
 }
 
@@ -392,23 +381,16 @@ async function escalateIncident(incident) {
 
 async function addShift() {
   try {
-    const shift = { ...newShift.value }
-
     const response = await fetch('/api/schedule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(shift)
+      body: JSON.stringify(newShift.value)
     })
-
     if (response.ok) {
-      const created = await response.json()
-      schedule.value.push(created)
-    } else {
-      schedule.value.push({ ...shift, id: Date.now().toString() })
+      schedule.value.push(await response.json())
+      fetchSchedule(); // Re-fetch to get populated name/phone
     }
-
     showScheduleModal.value = false
-    newShift.value = { name: '', phone: '', startTime: '', endTime: '' }
   } catch (err) {
     console.error('Failed to add shift:', err)
   }
@@ -416,21 +398,15 @@ async function addShift() {
 
 async function deleteShift(id) {
   if (!confirm('Remove this shift?')) return
-  
   try {
-    const response = await fetch(`/api/schedule?id=${id}`, {
-      method: 'DELETE'
-    })
-    
+    const response = await fetch(`/api/schedule?id=${id}`, { method: 'DELETE' })
     if (response.ok) {
       schedule.value = schedule.value.filter(s => s.id !== id)
     } else {
-      const error = await response.json()
-      alert(`Failed to delete shift: ${error.error || 'Unknown error'}`)
+      alert(`Failed to delete shift: ${(await response.json()).error || 'Unknown error'}`)
     }
   } catch (err) {
     console.error('Failed to delete shift:', err)
-    alert('Failed to delete shift. Check console for details.')
   }
 }
 
@@ -452,11 +428,8 @@ async function fetchUser() {
         name: data.clientPrincipal.userDetails,
         provider: data.clientPrincipal.identityProvider
       }
-      
-      // Initially use roles from SWA (Standard Plan)
       userRoles.value = data.clientPrincipal.userRoles || []
       
-      // Then supplement with roles from our API (Free Plan support)
       try {
         const apiResponse = await fetch('/api/users?me=true')
         if (apiResponse.ok) {
@@ -464,15 +437,20 @@ async function fetchUser() {
           if (apiUser && apiUser.roles) {
             userRoles.value = apiUser.roles
           }
+          // Also update user's name from our DB
+          if(apiUser && apiUser.name) user.value.name = apiUser.name;
         }
       } catch (apiErr) {
-        console.warn('Failed to fetch augmented roles from API:', apiErr)
+        console.warn('Failed to fetch augmented roles/profile from API:', apiErr)
       }
 
-      // Start log polling for admins/engineers
       if (isAdmin.value || isEngineer.value) {
         startLogPolling()
       }
+
+      // Add current user to the list of users for the dropdown
+      users.value.push(user.value);
+
     } else {
       router.push('/')
     }
@@ -484,10 +462,8 @@ async function fetchUser() {
 let logPollingInterval = null;
 function startLogPolling() {
   if (logPollingInterval) return;
-  
-  // Poll every 10 seconds
   logPollingInterval = setInterval(fetchLogs, 10000);
-  fetchLogs(); // Initial fetch
+  fetchLogs();
 }
 
 async function fetchLogs() {
@@ -496,33 +472,28 @@ async function fetchLogs() {
     if (response.ok) {
       const data = await response.json()
       const newLogs = data.logs.filter(log => log.timestamp > lastLogTimestamp.value)
-      
       if (newLogs.length > 0) {
         newLogs.reverse().forEach(log => {
           const time = new Date(log.timestamp).toLocaleTimeString()
           const msg = `[${log.source}] ${log.message}`
-          
-          if (log.level === 'error') {
-            console.error(`BEACON ERROR [${time}]: ${msg}`, log.details || '')
-          } else if (log.level === 'warn') {
-            console.warn(`BEACON WARN [${time}]: ${msg}`, log.details || '')
-          } else {
-            console.log(`BEACON INFO [${time}]: ${msg}`)
-          }
+          if (log.level === 'error') console.error(`BEACON ERROR [${time}]: ${msg}`, log.details || '')
+          else if (log.level === 'warn') console.warn(`BEACON WARN [${time}]: ${msg}`, log.details || '')
+          else console.log(`BEACON INFO [${time}]: ${msg}`)
         })
-        
         lastLogTimestamp.value = data.logs[0].timestamp
       }
     }
   } catch (err) {
-    // Quietly fail log polling
+    // Quietly fail
   }
 }
 
 onMounted(() => {
-  fetchUser()
-  fetchIncidents()
-  fetchSchedule()
+  fetchUser().then(() => {
+    fetchIncidents()
+    fetchSchedule()
+    fetchAllUsers()
+  })
 })
 
 onUnmounted(() => {

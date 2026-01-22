@@ -1,22 +1,39 @@
 <template>
-  <div class="container mx-auto p-4">
-    <h1 class="text-2xl font-bold mb-4">Account Management</h1>
-    <div v-if="user" class="space-y-4">
-      <div>
-        <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
-        <input type="text" id="name" v-model="user.name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+  <div class="dashboard">
+    <header class="dashboard-header">
+      <div class="logo">
+        <h1>Beacon</h1>
+        <span>Account Management</span>
       </div>
-      <div>
-        <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
-        <input type="text" id="phone" v-model="user.phone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+      <div class="user-info">
+        <button @click="goToDashboard" class="btn-account">Back to Dashboard</button>
       </div>
-      <button @click="updateUser" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-        Save Changes
-      </button>
-    </div>
-    <div v-else>
-      <p>Loading user data...</p>
-    </div>
+    </header>
+
+    <main class="dashboard-content">
+      <div class="account-form">
+        <div v-if="user" class="modal" style="display: block; position: relative; box-shadow: none;">
+          <h3>My Profile</h3>
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" v-model="user.name" placeholder="Your full name" />
+          </div>
+          <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="text" id="phone" v-model="user.phone" placeholder="+1234567890" />
+          </div>
+          <div class="modal-actions">
+            <button @click="updateUser" class="btn-save" :disabled="isSaving">
+              {{ isSaving ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+           <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
+        </div>
+        <div v-else class="loading">
+          Loading user data...
+        </div>
+      </div>
+    </main>
   </div>
 </template>
 
@@ -25,6 +42,8 @@ export default {
   data() {
     return {
       user: null,
+      isSaving: false,
+      successMessage: ''
     };
   },
   async created() {
@@ -33,34 +52,73 @@ export default {
   methods: {
     async fetchUser() {
       try {
-        const response = await fetch('/api/account');
-        if (response.ok) {
-          this.user = await response.json();
+        // First, get the user's identity from SWA
+        const meResponse = await fetch('/.auth/me');
+        const meData = await meResponse.json();
+        const clientPrincipal = meData.clientPrincipal;
+
+        if (clientPrincipal) {
+          // Then, fetch the detailed profile from our own API
+          const response = await fetch(`/api/users?id=${clientPrincipal.userId}`);
+          if (response.ok) {
+            this.user = await response.json();
+          } else {
+             // If user doesn't exist in our DB, create a shell
+            this.user = {
+              id: clientPrincipal.userId,
+              name: clientPrincipal.userDetails,
+              phone: ''
+            };
+          }
         } else {
-          console.error('Failed to fetch user data');
+          this.$router.push('/'); // Not logged in
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
       }
     },
     async updateUser() {
+      if (!this.user) return;
+      this.isSaving = true;
+      this.successMessage = '';
       try {
         const response = await fetch('/api/account', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(this.user),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: this.user.id,
+            name: this.user.name,
+            phone: this.user.phone,
+          }),
         });
         if (response.ok) {
-          alert('User data updated successfully');
+          this.successMessage = 'Profile updated successfully!';
         } else {
-          console.error('Failed to update user data');
+          const error = await response.json();
+          alert(`Failed to update: ${error.error || 'Unknown error'}`);
         }
       } catch (error) {
         console.error('Error updating user data:', error);
+        alert('An error occurred while saving. Please check the console.');
+      } finally {
+        this.isSaving = false;
       }
+    },
+    goToDashboard() {
+      this.$router.push('/dashboard');
     },
   },
 };
 </script>
+
+<style scoped>
+.account-form {
+  max-width: 600px;
+  margin: 2rem auto;
+}
+.success-message {
+  margin-top: 1rem;
+  color: #28a745;
+  text-align: center;
+}
+</style>
