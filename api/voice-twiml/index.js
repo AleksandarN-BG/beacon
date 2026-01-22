@@ -1,5 +1,5 @@
 const { CosmosClient } = require("@azure/cosmos");
-const qs = require("querystring");
+const qs =require("querystring");
 const twilio = require("twilio");
 const config = require("../shared/config");
 const logger = require("../shared/logger");
@@ -30,15 +30,13 @@ module.exports = async function (context, req) {
       }
     }
 
-    // Try to get incidentId from query first, then body
     const incidentId = req.query.incidentId || body.incidentId;
-    // Twilio Digits is usually in the body for the 'action' callback of a <Gather>
     const digits = body.Digits || req.query.Digits;
 
     await log(`Extracted: incidentId=${incidentId}, digits=${digits}`);
     
-    // If it's a GET, it might just be a manual check or a heartbeat
-    if (req.method === 'GET' && !digits) {
+    // If it's a GET without an incidentId, treat as a health check
+    if (req.method === 'GET' && !incidentId) {
         response.say({ voice: 'Polly.Joanna-Generative' }, "Beacon Voice API is active.");
         context.res = { status: 200, headers: { 'Content-Type': 'text/xml' }, body: response.toString() };
         return;
@@ -110,19 +108,18 @@ module.exports = async function (context, req) {
       await log(`Received unexpected digits: ${digits}`);
       response.say({ voice: 'Polly.Joanna-Generative' }, `You pressed ${digits}. Please try again or check the dashboard.`);
     } else {
-      // This might be the initial prompt or a fallback if something is missing
-      await log("No valid digits or incidentId found in request, gathering input.", 'warn');
-      const message = req.query.message || "Beacon Alert System";
+      // This is the initial call, so we gather input.
+      await log("No digits received, gathering input for incident: " + incidentId, 'info');
+      const message = req.query.message || "Beacon Alert System. Press 1 to acknowledge.";
       const gather = response.gather({
           input: 'dtmf',
           numDigits: 1,
-          action: `/api/voice-twiml?incidentId=${incidentId}`, // Submit back to this function
+          action: `/api/voice-twiml?incidentId=${incidentId}`,
           method: 'POST',
           timeout: 10
       });
       gather.say({ voice: 'Polly.Joanna-Generative' }, message);
-      gather.say({ voice: 'Polly.Joanna-Generative' }, "Press 1 to acknowledge.");
-
+      
       // If the user doesn't press a key, this will be said.
       response.say({ voice: 'Polly.Joanna-Generative' }, "We did not receive a response. Please check the dashboard for more details. Goodbye.");
     }
@@ -138,14 +135,13 @@ module.exports = async function (context, req) {
       await log(`Top-level error: ${safeMsg}`, 'error', error);
       
       const errorResponse = new VoiceResponse();
-      errorResponse.say({ voice: 'Polly.Joanna-Generative' }, `Internal error: ${safeMsg}`);
+      errorResponse.say({ voice: 'Polly.Joanna-Generative' }, `An application error occurred. Please check the system logs.`);
       context.res = {
         status: 200,
         headers: { 'Content-Type': 'text/xml' },
         body: errorResponse.toString()
       };
     } catch (fatal) {
-      // Final fallback: always return valid TwiML
       context.log.error(`[VoiceTwiML] Fatal error in error handler: ${fatal && fatal.message}`);
       context.res = {
         status: 200,
