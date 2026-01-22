@@ -1,5 +1,6 @@
 const { CosmosClient } = require("@azure/cosmos");
 const qs = require("querystring");
+const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
@@ -13,11 +14,11 @@ module.exports = async function (context, req) {
 
     if (digits === "1" && incidentId) {
       // Acknowledge the incident in Cosmos DB
-      const connectionString = process.env.COSMOS_CONNECTION_STRING;
+      const connectionString = config.cosmos.connectionString;
       if (connectionString) {
         const client = new CosmosClient(connectionString);
-        const database = client.database(process.env.COSMOS_DATABASE || "beacon");
-        const container = database.container(process.env.COSMOS_CONTAINER_INCIDENTS || "incidents");
+        const database = client.database(config.cosmos.database);
+        const container = database.container(config.cosmos.containers.incidents);
 
         try {
           const { resource: existing } = await container.item(incidentId, incidentId).read();

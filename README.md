@@ -69,7 +69,16 @@ func start
 
 ## Environment Variables
 
-See `api/local.settings.json` for required settings.
+The API uses environment variables for configuration. For local development, create an `api/.env` file (copied from `api/local.settings.json` previously, or see the list below).
+
+### Required Variables:
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER`
+- `COSMOS_CONNECTION_STRING`
+- `COSMOS_DATABASE` (defaults to `beacon`)
+- `AAD_CLIENT_ID`
+- `AAD_CLIENT_SECRET`
 
 ## License
 

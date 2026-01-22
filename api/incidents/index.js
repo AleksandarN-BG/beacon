@@ -1,11 +1,12 @@
 const { CosmosClient } = require("@azure/cosmos");
 const { v4: uuidv4 } = require("uuid");
+const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = process.env.COSMOS_CONNECTION_STRING;
-    const databaseId = process.env.COSMOS_DATABASE || "beacon";
-    const containerId = process.env.COSMOS_CONTAINER_INCIDENTS || "incidents";
+    const connectionString = config.cosmos.connectionString;
+    const databaseId = config.cosmos.database;
+    const containerId = config.cosmos.containers.incidents;
 
     // Get current user from auth header
     const header = req.headers["x-ms-client-principal"];
@@ -90,7 +91,7 @@ module.exports = async function (context, req) {
         };
 
         // Trigger alerts based on severity
-        const host = process.env.WEBSITE_HOSTNAME || req.headers['host'] || 'localhost:7071';
+        const host = config.system.hostname || req.headers['host'] || 'localhost:7071';
         await triggerAlerts(context, newIncident, host);
 
         const { resource: created } = await container.items.create(newIncident);
@@ -198,13 +199,13 @@ module.exports = async function (context, req) {
 
 async function triggerAlerts(context, incident, host) {
   // Get current on-call person
-  const connectionString = process.env.COSMOS_CONNECTION_STRING;
+  const connectionString = config.cosmos.connectionString;
   if (!connectionString) return;
 
   try {
     const client = new CosmosClient(connectionString);
-    const database = client.database(process.env.COSMOS_DATABASE || "beacon");
-    const containerId = process.env.COSMOS_CONTAINER_SCHEDULE || "schedule";
+    const database = client.database(config.cosmos.database);
+    const containerId = config.cosmos.containers.schedule;
     const scheduleContainer = database.container(containerId);
 
     const now = new Date().toISOString();
@@ -242,9 +243,9 @@ async function triggerAlerts(context, incident, host) {
 
 async function sendSMS(phone, incident, host) {
   const twilio = require('twilio');
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+  const accountSid = config.twilio.accountSid;
+  const authToken = config.twilio.authToken;
+  const fromNumber = config.twilio.phoneNumber;
 
   if (!accountSid || !authToken || !fromNumber) return;
 
@@ -263,9 +264,9 @@ async function sendSMS(phone, incident, host) {
 
 async function makeCall(phone, incident, host) {
   const twilio = require('twilio');
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+  const accountSid = config.twilio.accountSid;
+  const authToken = config.twilio.authToken;
+  const fromNumber = config.twilio.phoneNumber;
 
   if (!accountSid || !authToken || !fromNumber) return;
 

@@ -1,10 +1,11 @@
 const twilio = require('twilio');
+const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+    const accountSid = config.twilio.accountSid;
+    const authToken = config.twilio.authToken;
+    const fromNumber = config.twilio.phoneNumber;
 
     if (!accountSid || !authToken || !fromNumber) {
       context.res = {
@@ -26,7 +27,7 @@ module.exports = async function (context, req) {
 
     const client = twilio(accountSid, authToken);
 
-    const host = process.env.WEBSITE_HOSTNAME || req.headers['host'] || 'localhost:7071';
+    const host = config.system.hostname || req.headers['host'] || 'localhost:7071';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const callbackBaseUrl = `${protocol}://${host}`;
 

@@ -1,4 +1,5 @@
 const { CosmosClient } = require("@azure/cosmos");
+const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
@@ -23,11 +24,11 @@ module.exports = async function (context, req) {
     const roles = ["authenticated", "user"];
 
     // Check Cosmos DB for user roles
-    const connectionString = process.env.COSMOS_CONNECTION_STRING;
+    const connectionString = config.cosmos.connectionString;
 
     if (connectionString) {
-      const databaseId = process.env.COSMOS_DATABASE || "beacon";
-      const containerId = process.env.COSMOS_CONTAINER_USERS || "users";
+      const databaseId = config.cosmos.database;
+      const containerId = config.cosmos.containers.users;
       const client = new CosmosClient(connectionString);
       const database = client.database(databaseId);
       const container = database.container(containerId);

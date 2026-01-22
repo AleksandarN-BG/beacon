@@ -1,10 +1,11 @@
 const { CosmosClient } = require("@azure/cosmos");
+const config = require("../shared/config");
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = process.env.COSMOS_CONNECTION_STRING;
-    const databaseId = process.env.COSMOS_DATABASE || "beacon";
-    const containerId = process.env.COSMOS_CONTAINER_USERS || "users";
+    const connectionString = config.cosmos.connectionString;
+    const databaseId = config.cosmos.database;
+    const containerId = config.cosmos.containers.users;
 
     // Get current user from auth header
     const header = req.headers["x-ms-client-principal"];
