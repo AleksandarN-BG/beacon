@@ -1,30 +1,22 @@
+const qs = require("querystring");
+
 module.exports = async function (context, req) {
   // Handle call automation events (call connected, call ended, etc.)
-  const events = req.body;
+  // Twilio sends status callbacks as POST requests with application/x-www-form-urlencoded
+  const payload = typeof req.body === "string" ? qs.parse(req.body) : (req.body || {});
+  
+  // Twilio status callback parameters: CallSid, CallStatus, To, From, etc.
+  const callSid = payload.CallSid;
+  const callStatus = payload.CallStatus;
 
-  context.log("Call event received:", JSON.stringify(events));
-
-  // Process events as needed
-  if (Array.isArray(events)) {
-    for (const event of events) {
-      const eventType = event.type;
-      context.log(`Processing event: ${eventType}`);
-
-      // Handle different event types
-      switch (eventType) {
-        case "Microsoft.Communication.CallConnected":
-          context.log("Call connected");
-          break;
-        case "Microsoft.Communication.CallDisconnected":
-          context.log("Call disconnected");
-          break;
-        case "Microsoft.Communication.PlayCompleted":
-          context.log("Audio playback completed");
-          break;
-        default:
-          context.log(`Unhandled event type: ${eventType}`);
-      }
-    }
+  if (callSid) {
+    context.log(`Twilio Call Event: CallSid=${callSid}, Status=${callStatus}`);
+    
+    // You could store this status in a database to track alert delivery
+    // For now, we'll just log it
+  } else {
+    // Legacy/Mixed support for other event types if any
+    context.log("Call event received (unknown format):", JSON.stringify(payload));
   }
 
   context.res = {

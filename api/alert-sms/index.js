@@ -1,14 +1,15 @@
-const { SmsClient } = require("@azure/communication-sms");
+const twilio = require('twilio');
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = process.env.ACS_CONNECTION_STRING;
-    const fromNumber = process.env.ACS_PHONE_NUMBER;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-    if (!connectionString || !fromNumber) {
+    if (!accountSid || !authToken || !fromNumber) {
       context.res = {
         status: 500,
-        body: { error: "ACS not configured" }
+        body: { error: "Twilio not configured" }
       };
       return;
     }
@@ -23,23 +24,29 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const client = new SmsClient(connectionString);
+    const client = twilio(accountSid, authToken);
+
+    const host = process.env.WEBSITE_HOSTNAME || req.headers['host'];
+    const protocol = host && host.includes('localhost') ? 'http' : 'https';
+    const callbackBaseUrl = host ? `${protocol}://${host}` : null;
 
     const message = status === "up"
       ? `Beacon Alert: ${service} is back UP`
       : `Beacon Alert: ${service} is DOWN`;
 
-    const sendResults = await client.send({
+    const messageResponse = await client.messages.create({
+      body: message,
       from: fromNumber,
-      to: [phone],
-      message: message
+      to: phone,
+      statusCallback: callbackBaseUrl ? `${callbackBaseUrl}/api/call-events` : undefined
     });
 
     context.res = {
       status: 200,
-      body: { success: true, results: sendResults }
+      body: { success: true, messageId: messageResponse.sid, status: messageResponse.status }
     };
   } catch (error) {
+    context.log.error(`Error sending SMS: ${error.message}`);
     context.res = {
       status: 500,
       body: { error: error.message }

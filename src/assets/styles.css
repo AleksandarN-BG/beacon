@@ -184,6 +184,58 @@ body {
     transform: none;
 }
 
+.login-form .btn-login {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+}
+
+.auth-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.auth-buttons .btn-login {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-github {
+    background: white;
+    color: #24292e;
+}
+
+.btn-github:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+}
+
+.btn-microsoft {
+    background: white;
+    color: #2f2f2f;
+}
+
+.btn-microsoft:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+}
+
+.login-subtitle {
+    text-align: center;
+    opacity: 0.7;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.signup-text {
+    text-align: center;
+    opacity: 0.6;
+    margin-top: 1.2rem;
+    font-size: 0.85rem;
+}
+
 .error-message {
     color: #ffcccc;
     text-align: center;
@@ -253,6 +305,24 @@ body {
     color: white;
 }
 
+.user-role {
+    background: #8B0000;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.user-role.role-admin {
+    background: #8B0000;
+}
+
+.user-role.role-engineer {
+    background: #2563eb;
+}
+
 .btn-logout {
     padding: 0.5rem 1rem;
     background: transparent;
@@ -307,6 +377,313 @@ body {
 
 .stat-down .stat-value {
     color: #f87171;
+}
+
+.stat-critical .stat-value {
+    color: #ef4444;
+}
+
+.stat-warning .stat-value {
+    color: #f59e0b;
+}
+
+/* On-Call Banner */
+.oncall-banner {
+    background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.oncall-label {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+}
+
+.oncall-name {
+    color: #4ade80;
+    font-weight: 600;
+}
+
+.oncall-until {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.tabs button {
+    padding: 0.75rem 1.5rem;
+    background: #16213e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.tabs button:hover {
+    color: white;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tabs button.active {
+    background: #8B0000;
+    color: white;
+    border-color: #8B0000;
+}
+
+/* Incidents */
+.incidents-section, .schedule-section {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.incidents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.incident-card {
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 4px solid #6b7280;
+    border-radius: 8px;
+    padding: 1.25rem;
+}
+
+.incident-card.severity-low {
+    border-left-color: #3b82f6;
+}
+
+.incident-card.severity-medium {
+    border-left-color: #f59e0b;
+}
+
+.incident-card.severity-high {
+    border-left-color: #f97316;
+}
+
+.incident-card.severity-critical {
+    border-left-color: #ef4444;
+    animation: pulse-border 2s infinite;
+}
+
+.incident-card.resolved {
+    opacity: 0.6;
+    border-left-color: #4ade80;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-left-color: #ef4444; }
+    50% { border-left-color: #fca5a5; }
+}
+
+.incident-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.severity-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.severity-badge.low { background: #1e40af; color: white; }
+.severity-badge.medium { background: #b45309; color: white; }
+.severity-badge.high { background: #c2410c; color: white; }
+.severity-badge.critical { background: #dc2626; color: white; }
+
+.incident-time {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
+}
+
+.incident-card h3 {
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.incident-description {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+
+.incident-meta {
+    display: flex;
+    gap: 1.5rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.incident-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-ack, .btn-resolve, .btn-escalate {
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-ack {
+    background: transparent;
+    border: 1px solid #3b82f6;
+    color: #3b82f6;
+}
+
+.btn-ack:hover:not(:disabled) { background: rgba(59, 130, 246, 0.1); }
+.btn-ack:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-resolve {
+    background: transparent;
+    border: 1px solid #4ade80;
+    color: #4ade80;
+}
+
+.btn-resolve:hover { background: rgba(74, 222, 128, 0.1); }
+
+.btn-escalate {
+    background: transparent;
+    border: 1px solid #f97316;
+    color: #f97316;
+}
+
+.btn-escalate:hover { background: rgba(249, 115, 22, 0.1); }
+
+/* Schedule */
+.schedule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.schedule-card {
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.schedule-card.current-shift {
+    border-color: rgba(74, 222, 128, 0.5);
+    background: rgba(74, 222, 128, 0.05);
+}
+
+.shift-person {
+    color: white;
+    font-weight: 500;
+    min-width: 150px;
+}
+
+.shift-time {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.shift-contact {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+}
+
+.btn-delete-small {
+    padding: 0.3rem 0.6rem;
+    background: transparent;
+    border: 1px solid rgba(248, 113, 113, 0.5);
+    color: #f87171;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.btn-delete-small:hover {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+/* Severity Actions in Modal */
+.severity-actions {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-top: 0.5rem;
+}
+
+.action-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.severity-actions ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+}
+
+.severity-actions li {
+    margin-bottom: 0.25rem;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 3rem;
+}
+
+/* Modal textarea */
+.modal textarea {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: #1a1a2e;
+    color: white;
+    font-size: 1rem;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.modal select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: #1a1a2e;
+    color: white;
+    font-size: 1rem;
+}
+
+.modal select option {
+    background: #1a1a2e;
 }
 
 .monitors-section {

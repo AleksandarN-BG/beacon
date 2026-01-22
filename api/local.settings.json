@@ -2,13 +2,18 @@
   "IsEncrypted": false,
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "node",
-    "ACS_CONNECTION_STRING": "<your-acs-connection-string>",
-    "ACS_PHONE_NUMBER": "<your-acs-phone-number>",
+    "TWILIO_ACCOUNT_SID": "<your-twilio-account-sid>",
+    "TWILIO_AUTH_TOKEN": "<your-twilio-auth-token>",
+    "TWILIO_PHONE_NUMBER": "<your-twilio-phone-number>",
     "COSMOS_CONNECTION_STRING": "<your-cosmos-connection-string>",
     "COSMOS_DATABASE": "beacon",
     "COSMOS_CONTAINER_USERS": "users",
+    "COSMOS_CONTAINER_INCIDENTS": "incidents",
+    "COSMOS_CONTAINER_SCHEDULE": "schedule",
     "COSMOS_CONTAINER_MONITORS": "monitors",
-    "COSMOS_CONTAINER_LOGS": "uptimeLogs"
+    "COSMOS_CONTAINER_LOGS": "uptimeLogs",
+    "AAD_CLIENT_ID": "<your-aad-client-id>",
+    "AAD_CLIENT_SECRET": "<your-aad-client-secret>"
   }
 }
 

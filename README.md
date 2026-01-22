@@ -2,12 +2,24 @@
 
 > When downtime isn't an option.
 
-A simple uptime monitoring application built with Azure Static Web Apps, Azure Functions, Azure Cosmos DB, and Azure Communication Services.
+An incident reporting and on-call management system built with Vue.js, Azure Static Web Apps, Azure Functions, Azure Cosmos DB, and Twilio.
+
+## Features
+
+- **Incident Reporting** - Report and track incidents with severity levels
+- **On-Call Schedule** - Manage who's on-call and when
+- **Severity-Based Alerts**:
+  - Low: Log only
+  - Medium: Email notification
+  - High: SMS to on-call engineer
+  - Critical: Phone call + SMS
+- **Role-Based Access** - Admin and user roles
+- **Microsoft Entra ID (Azure AD) Auth** - Secure organizational authentication
 
 ## Architecture
 
 ```
-Azure Static Web Apps (Frontend)
+Azure Static Web Apps (Vue.js Frontend)
          |
          v
 Azure Functions (API)
@@ -15,17 +27,15 @@ Azure Functions (API)
     +----+----+
     |         |
     v         v
-Cosmos DB   Azure Communication Services
+Cosmos DB   Twilio
             (SMS + Voice Alerts)
 ```
 
-## Features
+## Cosmos DB Containers
 
-- User authentication
-- Monitor management (CRUD)
-- Uptime status dashboard
-- SMS alerts via Azure Communication Services
-- Voice call alerts via Azure Communication Services
+- `users` - User roles
+- `incidents` - Incident reports
+- `schedule` - On-call shifts
 
 ## Local Development
 
@@ -41,52 +51,25 @@ npm run dev
 ```bash
 cd api
 npm install
-```
-
-To run locally, you'll need Azure Functions Core Tools:
-```bash
-npm install -g azure-functions-core-tools@4
 func start
 ```
 
-## Environment Variables
-
-Create `api/local.settings.json` (not committed to git):
-
-```json
-{
-  "IsEncrypted": false,
-  "Values": {
-    "FUNCTIONS_WORKER_RUNTIME": "node",
-    "ACS_CONNECTION_STRING": "<your-acs-connection-string>",
-    "ACS_PHONE_NUMBER": "<your-acs-phone-number>",
-    "COSMOS_CONNECTION_STRING": "<your-cosmos-connection-string>",
-    "COSMOS_DATABASE": "beacon",
-    "COSMOS_CONTAINER_USERS": "users",
-    "COSMOS_CONTAINER_MONITORS": "monitors",
-    "COSMOS_CONTAINER_LOGS": "uptimeLogs"
-  }
-}
-```
-
-## Azure Setup
-
-1. **Azure Static Web Apps** - Link to this GitHub repo
-2. **Azure Communication Services** - Create resource, get connection string, provision phone number
-3. **Azure Cosmos DB** - Create free tier account, create database "beacon" with containers: users, monitors, uptimeLogs
-
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/login` | POST | User authentication |
-| `/api/status` | GET | Get all monitor statuses |
-| `/api/monitors` | GET | List all monitors |
-| `/api/monitors` | POST | Create new monitor |
-| `/api/monitors?id=` | PUT | Update monitor |
-| `/api/monitors?id=` | DELETE | Delete monitor |
-| `/api/alert-sms` | POST | Send SMS alert |
-| `/api/alert-call` | POST | Initiate voice call alert |
+| Endpoint | Method | Description | Role |
+|----------|--------|-------------|------|
+| `/api/incidents` | GET | List all incidents | authenticated |
+| `/api/incidents` | POST | Report new incident | authenticated |
+| `/api/incidents?id=` | PUT | Update incident | authenticated |
+| `/api/schedule` | GET | Get on-call schedule | authenticated |
+| `/api/schedule` | POST | Add shift | admin |
+| `/api/schedule?id=` | DELETE | Remove shift | admin |
+| `/api/alert-sms` | POST | Send SMS alert | admin |
+| `/api/alert-call` | POST | Initiate call | admin |
+
+## Environment Variables
+
+See `api/local.settings.json` for required settings.
 
 ## License
 

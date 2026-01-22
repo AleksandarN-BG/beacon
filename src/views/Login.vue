@@ -20,32 +20,12 @@
     <!-- Login Form -->
     <div class="login-form">
       <h2>Let's fix this.</h2>
-      <form @submit.prevent="handleLogin">
-        <div class="form-group">
-          <label for="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            v-model="email"
-            placeholder="Enter your email"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            v-model="password"
-            placeholder="Enter your password"
-            required
-          />
-        </div>
-        <button type="submit" class="btn-login" :disabled="isLoading">
-          {{ isLoading ? 'Signing in...' : 'Sign In' }}
-        </button>
-        <p v-if="error" class="error-message">{{ error }}</p>
-      </form>
+      <p class="login-subtitle">Sign in to report an incident</p>
+      <div class="auth-buttons">
+        <a href="/.auth/login/aad?post_login_redirect_uri=/dashboard" class="btn-login btn-microsoft">
+          Sign in with Microsoft
+        </a>
+      </div>
     </div>
   </div>
 </template>
@@ -55,11 +35,6 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-
-const email = ref('')
-const password = ref('')
-const isLoading = ref(false)
-const error = ref('')
 
 const emitters = ref([])
 const emitterIdCounter = ref(0)
@@ -85,36 +60,21 @@ function createEmitter() {
   timeouts.value.push(timeout)
 }
 
-async function handleLogin() {
-  isLoading.value = true
-  error.value = ''
-
+async function checkAuth() {
   try {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value
-      })
-    })
-
+    const response = await fetch('/.auth/me')
     const data = await response.json()
-
-    if (response.ok && data.success) {
-      localStorage.setItem('user', JSON.stringify(data.user))
+    if (data.clientPrincipal) {
       router.push('/dashboard')
-    } else {
-      error.value = data.error || 'Invalid credentials'
     }
   } catch (err) {
-    error.value = 'Unable to connect to server'
-  } finally {
-    isLoading.value = false
+    // Not authenticated, stay on login page
   }
 }
 
 onMounted(() => {
+  checkAuth()
+
   for (let i = 0; i < NUM_EMITTERS; i++) {
     const timeout = setTimeout(() => createEmitter(), i * 2000)
     timeouts.value.push(timeout)

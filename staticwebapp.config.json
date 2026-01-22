@@ -1,24 +1,95 @@
 {
+  "auth": {
+    "rolesSource": "/api/get-roles",
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
+          "clientIdSettingName": "AAD_CLIENT_ID",
+          "clientSecretSettingName": "AAD_CLIENT_SECRET"
+        }
+      }
+    }
+  },
   "routes": [
     {
-      "route": "/api/login",
+      "route": "/api/get-roles",
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/api/incidents",
+      "methods": ["GET", "POST"],
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/api/incidents",
+      "methods": ["PUT"],
+      "allowedRoles": ["engineer", "admin"]
+    },
+    {
+      "route": "/api/incidents",
+      "methods": ["DELETE"],
+      "allowedRoles": ["admin"]
+    },
+    {
+      "route": "/api/schedule",
+      "methods": ["GET"],
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/api/schedule",
+      "methods": ["POST", "DELETE"],
+      "allowedRoles": ["engineer", "admin"]
+    },
+    {
+      "route": "/api/alert-sms",
+      "allowedRoles": ["admin"]
+    },
+    {
+      "route": "/api/alert-call",
+      "allowedRoles": ["admin"]
+    },
+    {
+      "route": "/api/users",
+      "methods": ["GET"],
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/api/users",
+      "methods": ["PUT"],
+      "allowedRoles": ["admin"]
+    },
+    {
+      "route": "/api/voice-twiml",
       "allowedRoles": ["anonymous"]
     },
     {
-      "route": "/api/status",
+      "route": "/api/call-events",
       "allowedRoles": ["anonymous"]
     },
     {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/login",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/logout",
+      "rewrite": "/.auth/logout"
     }
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/*", "*.css", "*.js", "*.svg", "*.ico"]
+    "exclude": ["/api/*", "/.auth/*", "*.css", "*.js", "*.svg", "*.ico"]
   },
   "responseOverrides": {
     "401": {
+      "rewrite": "/index.html",
+      "statusCode": 302
+    },
+    "403": {
       "rewrite": "/index.html"
     }
   }
