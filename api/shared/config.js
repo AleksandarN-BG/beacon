@@ -11,6 +11,7 @@ try {
 module.exports = {
   cosmos: {
     connectionString: process.env.COSMOS_CONNECTION_STRING,
+    staticWebAppUrl: process.env.STATIC_WEB_APP_URL || null,
     database: process.env.COSMOS_DATABASE || "beacon",
     containers: {
       users: process.env.COSMOS_CONTAINER_USERS || "users",
