@@ -9,7 +9,7 @@
         <span class="user-role role-admin" v-if="isAdmin">Admin</span>
         <span class="user-role role-engineer" v-else-if="isEngineer">Engineer</span>
         <span>{{ user?.name || user?.email }}</span>
-        <button @click="goToAccount" class="btn-account">Account</button>
+        <button @click="showAccountModal = true" class="btn-logout">Account</button>
         <button @click="logout" class="btn-logout">Sign Out</button>
       </div>
     </header>
@@ -136,6 +136,41 @@
       </div>
     </main>
 
+    <!-- Account Modal -->
+    <div v-if="showAccountModal" class="modal-overlay" @click.self="showAccountModal = false">
+      <div class="modal">
+        <h3>My Profile</h3>
+        <form @submit.prevent="updateAccount">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input
+                type="text"
+                id="name"
+                v-model="accountForm.name"
+                placeholder="Your full name"
+                required
+            />
+          </div>
+          <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input
+                type="text"
+                id="phone"
+                v-model="accountForm.phone"
+                placeholder="+1234567890"
+            />
+          </div>
+          <p v-if="accountSuccess" class="success-message">{{ accountSuccess }}</p>
+          <div class="modal-actions">
+            <button type="button" @click="showAccountModal = false" class="btn-cancel">Cancel</button>
+            <button type="submit" class="btn-save" :disabled="isSavingAccount">
+              {{ isSavingAccount ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Report Incident Modal -->
     <div v-if="showIncidentModal" class="modal-overlay" @click.self="showIncidentModal = false">
       <div class="modal">
@@ -206,7 +241,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -221,9 +256,15 @@ const activeTab = ref('incidents')
 const lastLogTimestamp = ref(new Date().toISOString())
 const showIncidentModal = ref(false)
 const showScheduleModal = ref(false)
+const showAccountModal = ref(false)
 
 const newIncident = ref({ title: '', description: '', severity: 'medium' })
 const newShift = ref({ userId: '', startTime: '', endTime: '' })
+
+// Account form state
+const accountForm = ref({ name: '', phone: '' })
+const isSavingAccount = ref(false)
+const accountSuccess = ref('')
 
 const isAdmin = computed(() => userRoles.value.includes('admin'))
 const isEngineer = computed(() => userRoles.value.includes('engineer'))
@@ -235,6 +276,69 @@ const currentOnCall = computed(() => {
   const now = new Date()
   return schedule.value.find(s => new Date(s.startTime) <= now && new Date(s.endTime) >= now)
 })
+
+// Watch for account modal opening and pre-fill form
+watch(showAccountModal, async (isOpen) => {
+  if (isOpen) {
+    accountSuccess.value = ''
+    // Fetch fresh user data from API
+    try {
+      const response = await fetch(`/api/users?id=${user.value.id}`)
+      if (response.ok) {
+        const userData = await response.json()
+        accountForm.value = {
+          name: userData.name || user.value.name || '',
+          phone: userData.phone || ''
+        }
+      } else {
+        // User not in DB yet, use what we have
+        accountForm.value = {
+          name: user.value.name || '',
+          phone: ''
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch user data:', err)
+      accountForm.value = {
+        name: user.value.name || '',
+        phone: ''
+      }
+    }
+  }
+})
+
+async function updateAccount() {
+  isSavingAccount.value = true
+  accountSuccess.value = ''
+  try {
+    const response = await fetch('/api/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: user.value.id,
+        name: accountForm.value.name,
+        phone: accountForm.value.phone,
+      }),
+    })
+    if (response.ok) {
+      accountSuccess.value = 'Profile updated successfully!'
+      // Update local user object
+      user.value.name = accountForm.value.name
+      // Close modal after 1.5 seconds
+      setTimeout(() => {
+        showAccountModal.value = false
+      }, 1500)
+    } else {
+      const error = await response.json()
+      alert(`Failed to update: ${error.error || 'Unknown error'}`)
+    }
+  } catch (error) {
+    console.error('Error updating user data:', error)
+    alert('An error occurred while saving.')
+  } finally {
+    isSavingAccount.value = false
+  }
+}
 
 function canManageShift(shift) {
   return shift.userId === user.value?.id
@@ -394,10 +498,6 @@ function logout() {
   window.location.href = '/.auth/logout?post_logout_redirect_uri=/'
 }
 
-function goToAccount() {
-  router.push('/account')
-}
-
 async function fetchUser() {
   try {
     const response = await fetch('/.auth/me')
@@ -482,3 +582,12 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.success-message {
+  margin-top: 1rem;
+  color: #4ade80;
+  text-align: center;
+  font-size: 0.9rem;
+}
+</style>
