@@ -8,6 +8,7 @@ module.exports = async function (context, req) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
 
+  // Helper to log both to context, console, and System Logs for dashboard visibility
   const log = async (msg, level = 'info', details = null) => {
     try {
       await logger.logSystemEvent(context, level, msg, details);
@@ -19,6 +20,7 @@ module.exports = async function (context, req) {
   try {
     await log(`Voice request received: ${req.method}`, 'info');
 
+    // Twilio sends data as application/x-www-form-urlencoded
     let body = {};
     const rawBody = req.rawBody || req.body;
 
@@ -37,9 +39,14 @@ module.exports = async function (context, req) {
 
     await log(`Extracted: incidentId=${incidentId}, digits=${digits}`);
 
+    // If it's a GET without an incidentId, treat as a health check
     if (req.method === 'GET' && !incidentId) {
       response.say("Beacon Voice API is active.");
-      context.res = { status: 200, headers: { 'Content-Type': 'text/xml' }, body: response.toString() };
+      context.res = {
+        status: 200,
+        headers: { 'Content-Type': 'text/xml' },
+        body: response.toString()
+      };
       return;
     }
 
@@ -55,31 +62,29 @@ module.exports = async function (context, req) {
           const database = client.database(config.cosmos.database);
           const incidentContainer = database.container(config.cosmos.containers.incidents);
           const scheduleContainer = database.container(config.cosmos.containers.schedule);
-          const usersContainer = database.container(config.cosmos.containers.users);
 
+          await log(`Reading incident ${incidentId}`);
           const { resource: existing } = await incidentContainer.item(incidentId, incidentId).read();
 
           if (existing) {
             if (!existing.acknowledgedAt) {
+              // Find current on-call engineer from schedule
               const now = new Date().toISOString();
               const { resources: shifts } = await scheduleContainer.items
-                .query({
-                  query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
-                  parameters: [{ name: "@now", value: now }]
-                })
-                .fetchAll();
+                  .query({
+                    query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
+                    parameters: [{ name: "@now", value: now }]
+                  })
+                  .fetchAll();
 
               let assignedTo = "Unknown";
               let assignedToId = null;
-
+              let assignedToPhone = null;
               if (shifts.length > 0) {
+                assignedTo = shifts[0].name;
                 assignedToId = shifts[0].userId;
-                const { resource: user } = await usersContainer.item(assignedToId, assignedToId).read();
-                if (user) {
-                  assignedTo = user.name;
-                }
+                assignedToPhone = shifts[0].phone;
               }
-
               const updated = {
                 ...existing,
                 status: "acknowledged",
@@ -88,6 +93,7 @@ module.exports = async function (context, req) {
                 updatedAt: new Date().toISOString(),
                 assignedTo,
                 assignedToId,
+                assignedToPhone
               };
 
               await incidentContainer.item(incidentId, incidentId).replace(updated);
@@ -110,6 +116,7 @@ module.exports = async function (context, req) {
       await log(`Received unexpected digits: ${digits}`);
       response.say(`You pressed ${digits}. Please try again or check the dashboard.`);
     } else {
+      // This is the initial call, so we gather input.
       await log("No digits received, gathering input for incident: " + incidentId, 'info');
       const message = req.query.message || "Beacon Alert System. Press 1 to acknowledge.";
       const gather = response.gather({
@@ -120,6 +127,8 @@ module.exports = async function (context, req) {
         timeout: 10
       });
       gather.say(message);
+
+      // If the user doesn't press a key, this will be said.
       response.say("We did not receive a response. Please check the dashboard for more details. Goodbye.");
     }
 

@@ -53,9 +53,21 @@ module.exports = async function (context, req) {
 
     const client = twilio(accountSid, authToken);
 
-    const host = req.headers['host'] || config.system.hostname || 'localhost:7071';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const callbackBaseUrl = `${protocol}://${host}`;
+    // CRITICAL FIX: Use Static Web App URL for Twilio webhooks
+    // This ensures webhooks go through SWA routing (which allows anonymous access)
+    // instead of hitting the Function App directly (which requires authentication)
+    const staticWebAppUrl = config.system.staticWebAppUrl || process.env.STATIC_WEB_APP_URL;
+
+    if (!staticWebAppUrl) {
+      await logger.logSystemEvent(context, 'error', 'STATIC_WEB_APP_URL not configured - Twilio webhooks will fail with 401');
+      context.res = {
+        status: 500,
+        body: { error: "STATIC_WEB_APP_URL environment variable not set. Please configure it in Azure." }
+      };
+      return;
+    }
+
+    const callbackBaseUrl = staticWebAppUrl;
 
     // Construct the message that will be spoken to the user
     const message = `Critical Beacon Alert: ${service} is experiencing issues. Press 1 to acknowledge this incident.`;
@@ -64,6 +76,8 @@ module.exports = async function (context, req) {
     const twimlUrl = new URL(`${callbackBaseUrl}/api/voice-twiml`);
     twimlUrl.searchParams.append('incidentId', incidentId);
     twimlUrl.searchParams.append('message', message);
+
+    await logger.logSystemEvent(context, 'info', `Using webhook URL: ${twimlUrl.toString()}`);
 
     try {
       const call = await client.calls.create({
@@ -80,7 +94,8 @@ module.exports = async function (context, req) {
         status: 200,
         body: {
           success: true,
-          callSid: call.sid
+          callSid: call.sid,
+          webhookUrl: twimlUrl.toString() // Include for debugging
         }
       };
     } catch (err) {
