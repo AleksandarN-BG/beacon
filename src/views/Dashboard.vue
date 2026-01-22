@@ -9,6 +9,7 @@
         <span class="user-role role-admin" v-if="isAdmin">Admin</span>
         <span class="user-role role-engineer" v-else-if="isEngineer">Engineer</span>
         <span>{{ user?.name || user?.email }}</span>
+        <button @click="goToAccount" class="btn-account">Account</button>
         <button @click="logout" class="btn-logout">Sign Out</button>
       </div>
     </header>
@@ -437,6 +438,10 @@ function logout() {
   window.location.href = '/.auth/logout?post_logout_redirect_uri=/'
 }
 
+function goToAccount() {
+  router.push('/account')
+}
+
 async function fetchUser() {
   try {
     const response = await fetch('/.auth/me')
@@ -526,4 +531,3 @@ onUnmounted(() => {
   }
 })
 </script>
-

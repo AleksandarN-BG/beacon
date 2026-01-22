@@ -5,10 +5,12 @@ import './assets/styles.css'
 
 import Login from './views/Login.vue'
 import Dashboard from './views/Dashboard.vue'
+import Account from './views/Account.vue'
 
 const routes = [
   { path: '/', name: 'Login', component: Login },
-  { path: '/dashboard', name: 'Dashboard', component: Dashboard }
+  { path: '/dashboard', name: 'Dashboard', component: Dashboard },
+  { path: '/account', name: 'Account', component: Account }
 ]
 
 const router = createRouter({
@@ -19,4 +21,3 @@ const router = createRouter({
 const app = createApp(App)
 app.use(router)
 app.mount('#app')
-

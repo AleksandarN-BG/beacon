@@ -7,93 +7,66 @@ module.exports = async function (context, req) {
   try {
     const connectionString = config.cosmos.connectionString;
     const databaseId = config.cosmos.database;
-    const containerId = config.cosmos.containers.schedule;
+    const scheduleContainerId = config.cosmos.containers.schedule;
+    const usersContainerId = config.cosmos.containers.users;
 
-    // Get current user using shared auth helper
     const currentUser = await auth.getUser(context, req);
 
-    const isAdmin = currentUser?.roles.includes("admin") || false;
-    const isEngineer = currentUser?.roles.includes("engineer") || false;
-
     if (!currentUser) {
-      context.res = {
-        status: 401,
-        body: { error: "Authentication required" }
-      };
+      context.res = { status: 401, body: { error: "Authentication required" } };
       return;
     }
 
+    const isAdmin = currentUser.roles.includes("admin");
+    currentUser.roles.includes("engineer");
     if (!connectionString) {
-      // Return mock data if database not configured
-      if (req.method === "GET") {
-        context.res = {
-          status: 200,
-          body: { schedule: [] }
-        };
-        return;
-      }
-
-      context.res = {
-        status: 503,
-        body: { error: "Database not configured. Please set COSMOS_CONNECTION_STRING in application settings." }
-      };
+      context.res = { status: 503, body: { error: "Database not configured" } };
       return;
     }
 
     const client = new CosmosClient(connectionString);
     const database = client.database(databaseId);
-    const container = database.container(containerId);
+    const scheduleContainer = database.container(scheduleContainerId);
+    const usersContainer = database.container(usersContainerId);
 
     const method = req.method.toUpperCase();
 
     switch (method) {
       case "GET": {
-        const { resources: schedule } = await container.items
-          .query("SELECT * FROM c ORDER BY c.startTime ASC")
-          .fetchAll();
-        context.res = { status: 200, body: { schedule } };
+        const { resources: shifts } = await scheduleContainer.items.query("SELECT * FROM c ORDER BY c.startTime ASC").fetchAll();
+        const { resources: users } = await usersContainer.items.query("SELECT c.id, c.name, c.phone FROM c").fetchAll();
+        const userMap = new Map(users.map(u => [u.id, u]));
+        const populatedShifts = shifts.map(shift => ({
+          ...shift,
+          name: userMap.get(shift.userId)?.name || "Unknown User",
+          phone: userMap.get(shift.userId)?.phone || "No Phone",
+        }));
+        context.res = { status: 200, body: { schedule: populatedShifts } };
         break;
       }
 
       case "POST": {
-        const { name, phone, startTime, endTime } = req.body;
+        const { userId, startTime, endTime } = req.body;
 
-        if (!name || !phone || !startTime || !endTime) {
-          context.res = {
-            status: 400,
-            body: { error: "Missing required fields: name, phone, startTime, endTime" }
-          };
+        if (!userId || !startTime || !endTime) {
+          context.res = { status: 400, body: { error: "Missing required fields: userId, startTime, endTime" } };
           return;
         }
 
-        // Engineers can only create shifts for themselves
-        if (isEngineer && !isAdmin) {
-          if (name !== currentUser?.name) {
-            context.res = {
-              status: 403,
-              body: { error: "Engineers can only manage their own schedule" }
-            };
-            return;
-          }
-        } else if (!isAdmin) {
-          context.res = {
-            status: 403,
-            body: { error: "Only admins and engineers can create shifts" }
-          };
+        if (!isAdmin && userId !== currentUser.id) {
+          context.res = { status: 403, body: { error: "Engineers can only create shifts for themselves" } };
           return;
         }
 
         const newShift = {
           id: uuidv4(),
-          name,
-          phone,
-          userId: currentUser?.id,
+          userId,
           startTime,
           endTime,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
         };
 
-        const { resource: created } = await container.items.create(newShift);
+        const { resource: created } = await scheduleContainer.items.create(newShift);
         context.res = { status: 201, body: created };
         break;
       }
@@ -101,57 +74,31 @@ module.exports = async function (context, req) {
       case "DELETE": {
         const deleteId = req.query.id;
         if (!deleteId) {
-          context.res = {
-            status: 400,
-            body: { error: "Missing shift id" }
-          };
+          context.res = { status: 400, body: { error: "Missing shift id" } };
           return;
         }
 
-        // Get the shift to check ownership
-        const { resource: shift } = await container.item(deleteId, deleteId).read();
+        const { resource: shift } = await scheduleContainer.item(deleteId, deleteId).read();
 
         if (!shift) {
-          context.res = {
-            status: 404,
-            body: { error: "Shift not found" }
-          };
+          context.res = { status: 404, body: { error: "Shift not found" } };
           return;
         }
 
-        // Engineers can only delete their own shifts
-        if (isEngineer && !isAdmin) {
-          if (shift.userId !== currentUser?.id && shift.name !== currentUser?.name) {
-            context.res = {
-              status: 403,
-              body: { error: "Engineers can only delete their own shifts" }
-            };
-            return;
-          }
-        } else if (!isAdmin) {
-          context.res = {
-            status: 403,
-            body: { error: "Only admins and engineers can delete shifts" }
-          };
+        if (!isAdmin && shift.userId !== currentUser.id) {
+          context.res = { status: 403, body: { error: "Engineers can only delete their own shifts" } };
           return;
         }
 
-        await container.item(deleteId, deleteId).delete();
+        await scheduleContainer.item(deleteId, deleteId).delete();
         context.res = { status: 200, body: { success: true, deleted: deleteId } };
         break;
       }
 
       default:
-        context.res = {
-          status: 405,
-          body: { error: "Method not allowed" }
-        };
+        context.res = { status: 405, body: { error: "Method not allowed" } };
     }
   } catch (error) {
-    context.res = {
-      status: 500,
-      body: { error: error.message }
-    };
+    context.res = { status: 500, body: { error: error.message } };
   }
 };
-
