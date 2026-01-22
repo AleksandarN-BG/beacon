@@ -62,6 +62,7 @@ module.exports = async function (context, req) {
           const database = client.database(config.cosmos.database);
           const incidentContainer = database.container(config.cosmos.containers.incidents);
           const scheduleContainer = database.container(config.cosmos.containers.schedule);
+          const usersContainer = database.container(config.cosmos.containers.users);
 
           await log(`Reading incident ${incidentId}`);
           const { resource: existing } = await incidentContainer.item(incidentId, incidentId).read();
@@ -80,11 +81,27 @@ module.exports = async function (context, req) {
               let assignedTo = "Unknown";
               let assignedToId = null;
               let assignedToPhone = null;
+
               if (shifts.length > 0) {
-                assignedTo = shifts[0].name;
                 assignedToId = shifts[0].userId;
                 assignedToPhone = shifts[0].phone;
+                assignedTo = shifts[0].name || "Unknown"; // Use name from shift if available
+
+                // If name not in shift, look it up from users container
+                if (!assignedTo || assignedTo === "Unknown") {
+                  try {
+                    const { resource: userDoc } = await usersContainer.item(assignedToId, assignedToId).read();
+                    if (userDoc && userDoc.name) {
+                      assignedTo = userDoc.name;
+                      assignedToPhone = userDoc.phone || assignedToPhone;
+                    }
+                  } catch (userErr) {
+                    await log(`Could not fetch user ${assignedToId}: ${userErr.message}`, 'warn');
+                    assignedTo = "Engineer"; // Fallback to generic name
+                  }
+                }
               }
+
               const updated = {
                 ...existing,
                 status: "acknowledged",
@@ -97,7 +114,7 @@ module.exports = async function (context, req) {
               };
 
               await incidentContainer.item(incidentId, incidentId).replace(updated);
-              await log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
+              await log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo} (${assignedToId})`);
               response.say(`Thank you ${assignedTo}. The incident has been acknowledged. Goodbye.`);
             } else {
               await log(`Incident ${incidentId} was already acknowledged`, 'warn');
