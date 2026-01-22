@@ -55,7 +55,6 @@ module.exports = async function (context, req) {
 
     if (digits === "1" && incidentId) {
       log(`Attempting to acknowledge incident: ${incidentId}`);
-      
       const connectionString = config.cosmos.connectionString;
       if (!connectionString) {
         log("Missing COSMOS_CONNECTION_STRING", 'error');
@@ -64,26 +63,42 @@ module.exports = async function (context, req) {
         try {
           const client = new CosmosClient(connectionString);
           const database = client.database(config.cosmos.database);
-          const container = database.container(config.cosmos.containers.incidents);
-
+          const incidentContainer = database.container(config.cosmos.containers.incidents);
+          const scheduleContainer = database.container(config.cosmos.containers.schedule);
           log(`Reading item ${incidentId} from container: ${config.cosmos.containers.incidents}`);
-          const { resource: existing } = await container.item(incidentId, incidentId).read();
-          
+          const { resource: existing } = await incidentContainer.item(incidentId, incidentId).read();
           if (existing) {
             if (!existing.acknowledgedAt) {
+              // Find current on-call engineer from schedule
+              const now = new Date().toISOString();
+              const { resources: shifts } = await scheduleContainer.items
+                .query({
+                  query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
+                  parameters: [{ name: "@now", value: now }]
+                })
+                .fetchAll();
+              let assignedTo = "Unknown";
+              let assignedToId = null;
+              let assignedToPhone = null;
+              if (shifts.length > 0) {
+                assignedTo = shifts[0].name;
+                assignedToId = shifts[0].userId;
+                assignedToPhone = shifts[0].phone;
+              }
               const updated = {
                 ...existing,
                 status: "acknowledged",
                 acknowledgedAt: new Date().toISOString(),
                 acknowledgedVia: "voice",
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                assignedTo,
+                assignedToId,
+                assignedToPhone
               };
-              
               log(`Replacing item: ${incidentId}`);
-              await container.item(incidentId, incidentId).replace(updated);
-              log(`Incident ${incidentId} successfully acknowledged via voice`);
-              
-              response.say({ voice: 'Polly.Joanna-Generative' }, "Thank you. The incident has been acknowledged. Goodbye.");
+              await incidentContainer.item(incidentId, incidentId).replace(updated);
+              log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
+              response.say({ voice: 'Polly.Joanna-Generative' }, `Thank you ${assignedTo}. The incident has been acknowledged. Goodbye.`);
             } else {
               log(`Incident ${incidentId} was already acknowledged`);
               response.say({ voice: 'Polly.Joanna-Generative' }, "This incident has already been acknowledged. Thank you, goodbye.");
