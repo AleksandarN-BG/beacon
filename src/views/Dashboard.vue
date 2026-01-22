@@ -504,23 +504,32 @@ async function fetchUser() {
     if (data.clientPrincipal) {
       user.value = {
         id: data.clientPrincipal.userId,
-        name: data.clientPrincipal.userDetails,
+        name: data.clientPrincipal.userDetails, // This is the email initially
+        email: data.clientPrincipal.userDetails,
         provider: data.clientPrincipal.identityProvider
       }
       userRoles.value = data.clientPrincipal.userRoles || []
 
       try {
-        const apiResponse = await fetch('/api/users?me=true')
-        if (apiResponse.ok) {
-          const apiUser = await apiResponse.json()
+        // Get roles from users endpoint
+        const rolesResponse = await fetch('/api/users?me=true')
+        if (rolesResponse.ok) {
+          const apiUser = await rolesResponse.json()
           if (apiUser && apiUser.roles) {
             userRoles.value = apiUser.roles
           }
-          // Also update user's name from our DB
-          if(apiUser && apiUser.name) user.value.name = apiUser.name;
+        }
+
+        // Get actual name from account endpoint (reads from database)
+        const accountResponse = await fetch('/api/account')
+        if (accountResponse.ok) {
+          const accountData = await accountResponse.json()
+          if (accountData && accountData.name) {
+            user.value.name = accountData.name
+          }
         }
       } catch (apiErr) {
-        console.warn('Failed to fetch augmented roles/profile from API:', apiErr)
+        console.warn('Failed to fetch user profile from API:', apiErr)
       }
 
       if (isAdmin.value || isEngineer.value) {
