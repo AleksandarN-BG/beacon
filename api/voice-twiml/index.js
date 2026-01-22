@@ -59,6 +59,7 @@ module.exports = async function (context, req) {
       if (!connectionString) {
         log("Missing COSMOS_CONNECTION_STRING", 'error');
         response.say({ voice: 'Polly.Joanna-Generative' }, "System configuration error. Connection string missing.");
+        console.error("[VoiceTwiML] Missing COSMOS_CONNECTION_STRING");
       } else {
         try {
           const client = new CosmosClient(connectionString);
@@ -66,17 +67,20 @@ module.exports = async function (context, req) {
           const incidentContainer = database.container(config.cosmos.containers.incidents);
           const scheduleContainer = database.container(config.cosmos.containers.schedule);
           log(`Reading item ${incidentId} from container: ${config.cosmos.containers.incidents}`);
+          console.log(`[VoiceTwiML] Reading incident: ${incidentId}`);
           const { resource: existing } = await incidentContainer.item(incidentId, incidentId).read();
           if (existing) {
             if (!existing.acknowledgedAt) {
               // Find current on-call engineer from schedule
               const now = new Date().toISOString();
+              console.log(`[VoiceTwiML] Querying schedule for now: ${now}`);
               const { resources: shifts } = await scheduleContainer.items
                 .query({
                   query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
                   parameters: [{ name: "@now", value: now }]
                 })
                 .fetchAll();
+              console.log(`[VoiceTwiML] Found shifts:`, shifts);
               let assignedTo = "Unknown";
               let assignedToId = null;
               let assignedToPhone = null;
@@ -95,20 +99,24 @@ module.exports = async function (context, req) {
                 assignedToId,
                 assignedToPhone
               };
-              log(`Replacing item: ${incidentId}`);
+              console.log(`[VoiceTwiML] Updating incident:`, updated);
               await incidentContainer.item(incidentId, incidentId).replace(updated);
               log(`Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
+              console.log(`[VoiceTwiML] Incident ${incidentId} successfully acknowledged via voice by ${assignedTo}`);
               response.say({ voice: 'Polly.Joanna-Generative' }, `Thank you ${assignedTo}. The incident has been acknowledged. Goodbye.`);
             } else {
               log(`Incident ${incidentId} was already acknowledged`);
+              console.log(`[VoiceTwiML] Incident ${incidentId} was already acknowledged`);
               response.say({ voice: 'Polly.Joanna-Generative' }, "This incident has already been acknowledged. Thank you, goodbye.");
             }
           } else {
             log(`Incident not found: ${incidentId}`, 'warn');
+            console.warn(`[VoiceTwiML] Incident not found: ${incidentId}`);
             response.say({ voice: 'Polly.Joanna-Generative' }, "I'm sorry, I couldn't find that incident in our records.");
           }
         } catch (dbError) {
           log(`Database error: ${dbError.message}`, 'error');
+          console.error(`[VoiceTwiML] Database error:`, dbError);
           response.say({ voice: 'Polly.Joanna-Generative' }, "There was a database error while acknowledging the incident. Please use the dashboard.");
         }
       }
@@ -131,9 +139,9 @@ module.exports = async function (context, req) {
     };
   } catch (error) {
     log(`Top-level error: ${error.message}`, 'error');
+    console.error(`[VoiceTwiML] Top-level error:`, error);
     const errorResponse = new VoiceResponse();
     errorResponse.say({ voice: 'Polly.Joanna-Generative' }, "We're sorry, an internal error occurred while processing this call.");
-    
     context.res = {
       status: 200,
       headers: { 'Content-Type': 'text/xml' },
