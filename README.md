@@ -10,9 +10,8 @@ An incident reporting and on-call management system built with Vue.js, Azure Sta
 - **On-Call Schedule** - Manage who's on-call and when
 - **Severity-Based Alerts**:
   - Low: Log only
-  - Medium: Email notification
-  - High: SMS to on-call engineer
-  - Critical: Phone call + SMS
+  - Medium: SMS notification
+  - High: Phone call + SMS to on-call engineer
 - **Role-Based Access** - Admin and user roles
 - **Microsoft Entra ID (Azure AD) Auth** - Secure organizational authentication
 
