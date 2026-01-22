@@ -101,14 +101,14 @@
                 {{ incident.status === 'acknowledged' ? 'Acknowledged' : 'Acknowledge' }}
               </button>
               <button
-                  v-if="incident.status !== 'resolved'"
+                  v-if="(isEngineer || isAdmin) && incident.status !== 'resolved'"
                   @click="resolveIncident(incident)"
                   class="btn-resolve"
               >
                 Resolve
               </button>
               <button
-                  v-if="incident.status === 'resolved'"
+                  v-if="(isEngineer || isAdmin) && incident.status === 'resolved'"
                   @click="archiveIncident(incident)"
                   class="btn-archive"
               >

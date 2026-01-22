@@ -5,23 +5,12 @@ const logger = require("../shared/logger");
 
 module.exports = async function (context, req) {
   try {
-    // Authenticate user
+    // Authenticate user - any authenticated user can trigger alerts
     const currentUser = await auth.getUser(context, req);
     if (!currentUser) {
       context.res = {
         status: 401,
         body: { error: "Authentication required" }
-      };
-      return;
-    }
-
-    // Only admins and engineers can trigger alerts manually
-    const isAdmin = currentUser.roles.includes("admin");
-    const isEngineer = currentUser.roles.includes("engineer");
-    if (!isAdmin && !isEngineer) {
-      context.res = {
-        status: 403,
-        body: { error: "Permission denied. Only admins and engineers can trigger alerts." }
       };
       return;
     }

@@ -114,7 +114,7 @@ module.exports = async function (context, req) {
         // Check permissions for different actions
         const action = req.body.status;
 
-        // Engineers can only acknowledge, not resolve or escalate
+        // Engineers and admins can acknowledge
         if (action === "acknowledged") {
           if (!isAdmin && !isEngineer) {
             context.res = {
@@ -123,13 +123,25 @@ module.exports = async function (context, req) {
             };
             return;
           }
-        } else if (action === "resolved") {
-          // Anyone authenticated can resolve for now
-        } else if (req.body.escalate) {
-          if (!isAdmin) {
+        }
+
+        // Engineers and admins can resolve
+        if (action === "resolved") {
+          if (!isAdmin && !isEngineer) {
             context.res = {
               status: 403,
-              body: { error: "Only admins can escalate incidents" }
+              body: { error: "Only engineers and admins can resolve incidents" }
+            };
+            return;
+          }
+        }
+
+        // Engineers and admins can archive
+        if (req.body.archived === true) {
+          if (!isAdmin && !isEngineer) {
+            context.res = {
+              status: 403,
+              body: { error: "Only engineers and admins can archive incidents" }
             };
             return;
           }
