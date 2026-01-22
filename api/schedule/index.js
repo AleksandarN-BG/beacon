@@ -1,6 +1,7 @@
 const { CosmosClient } = require("@azure/cosmos");
 const { v4: uuidv4 } = require("uuid");
 const config = require("../shared/config");
+const auth = require("../shared/auth");
 
 module.exports = async function (context, req) {
   try {
@@ -8,18 +9,8 @@ module.exports = async function (context, req) {
     const databaseId = config.cosmos.database;
     const containerId = config.cosmos.containers.schedule;
 
-    // Get current user from auth header
-    const header = req.headers["x-ms-client-principal"];
-    let currentUser = null;
-    if (header) {
-      const encoded = Buffer.from(header, "base64");
-      const decoded = JSON.parse(encoded.toString("utf8"));
-      currentUser = {
-        id: decoded.userId,
-        name: decoded.userDetails,
-        roles: decoded.userRoles || []
-      };
-    }
+    // Get current user using shared auth helper
+    const currentUser = await auth.getUser(context, req);
 
     const isAdmin = currentUser?.roles.includes("admin") || false;
     const isEngineer = currentUser?.roles.includes("engineer") || false;

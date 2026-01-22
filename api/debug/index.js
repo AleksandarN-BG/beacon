@@ -1,13 +1,10 @@
 const config = require("../shared/config");
+const auth = require("../shared/auth");
 
 module.exports = async function (context, req) {
   try {
-    const header = req.headers["x-ms-client-principal"];
-    let currentUser = null;
-    if (header) {
-      const encoded = Buffer.from(header, "base64");
-      currentUser = JSON.parse(encoded.toString("utf8"));
-    }
+    // Get current user using shared auth helper
+    const currentUser = await auth.getUser(context, req);
 
     if (!currentUser) {
       context.res = {
@@ -17,14 +14,14 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const isAdmin = currentUser.userRoles && currentUser.userRoles.includes("admin");
+    const isAdmin = currentUser.roles && currentUser.roles.includes("admin");
 
     const debugInfo = {
       timestamp: new Date().toISOString(),
       user: {
-        id: currentUser.userId,
-        name: currentUser.userDetails,
-        roles: currentUser.userRoles
+        id: currentUser.id,
+        name: currentUser.name,
+        roles: currentUser.roles
       },
       configStatus: {
         COSMOS_CONNECTION_STRING: !!config.cosmos.connectionString,
