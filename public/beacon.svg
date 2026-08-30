@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Beacon">
+  <title>Beacon</title>
+  <!-- Palette from src/assets/styles.css: navy #16213e, alert red #ef4444.
+
+       Two elements only. A favicon is rendered at 16px, where a 64px viewBox
+       divides by four: anything thinner than a 6-unit stroke disappears, and
+       two shapes closer than ~6 units merge into one blob. -->
+  <rect width="64" height="64" rx="14" fill="#16213e"/>
+
+  <circle cx="19" cy="32" r="7.5" fill="#ef4444"/>
+  <path d="M30 20 A 15 15 0 0 1 30 44" fill="none" stroke="#ef4444"
+        stroke-width="7" stroke-linecap="round"/>
+</svg>
