@@ -32,5 +32,28 @@ module.exports = {
   },
   system: {
     hostname: process.env.WEBSITE_HOSTNAME
+  },
+  dev: {
+    /*
+     * Local-only escape hatch. The x-ms-client-principal header is injected by
+     * Static Web Apps and cannot be forged by a caller; a request body can be.
+     * Setting this to "true" lets the API take identity from the body so the
+     * Functions host can be exercised without SWA in front of it.
+     *
+     * It must never be set in a deployed environment: with it on, any caller
+     * can name themselves any user and claim any role.
+     */
+    allowBodyIdentity: process.env.ALLOW_BODY_IDENTITY === "true",
+
+    /*
+     * Local-only escape hatch, same shape as the one above. Twilio signs every
+     * webhook with the account auth token; without a real Twilio calling in,
+     * nothing can produce a valid signature, so exercising voice-twiml or
+     * call-events by hand needs the check turned off.
+     *
+     * It must never be set in a deployed environment: with it on, anyone can
+     * acknowledge any incident by requesting a URL.
+     */
+    allowInsecureWebhooks: process.env.ALLOW_INSECURE_WEBHOOKS === "true"
   }
 };

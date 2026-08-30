@@ -1,5 +1,4 @@
-const { CosmosClient } = require("@azure/cosmos");
-const config = require("./config");
+const cosmos = require("./cosmos");
 
 async function logSystemEvent(context, level, message, details = null) {
   const event = {
@@ -23,14 +22,10 @@ async function logSystemEvent(context, level, message, details = null) {
   }
 
   // Try to persist to Cosmos DB
-  const connectionString = config.cosmos.connectionString;
-  if (!connectionString) return event;
+  const container = cosmos.container("logs");
+  if (!container) return event;
 
   try {
-    const client = new CosmosClient(connectionString);
-    const database = client.database(config.cosmos.database);
-    const container = database.container(config.cosmos.containers.logs);
-    
     await container.items.create(event);
   } catch (err) {
     // If we fail to log to DB, don't crash the whole thing

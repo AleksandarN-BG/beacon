@@ -1,6 +1,5 @@
-const { CosmosClient } = require("@azure/cosmos");
-const config = require("../shared/config");
 const auth = require("../shared/auth");
+const cosmos = require("../shared/cosmos");
 
 module.exports = async function (context, req) {
   try {
@@ -25,15 +24,11 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const connectionString = config.cosmos.connectionString;
-    if (!connectionString) {
+    const container = cosmos.container("logs");
+    if (!container) {
       context.res = { status: 200, body: { logs: [] } };
       return;
     }
-
-    const client = new CosmosClient(connectionString);
-    const database = client.database(config.cosmos.database);
-    const container = database.container(config.cosmos.containers.logs);
 
     // Get the last 50 logs, most recent first
     const { resources: logs } = await container.items

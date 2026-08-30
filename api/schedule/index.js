@@ -1,15 +1,9 @@
-const { CosmosClient } = require("@azure/cosmos");
 const { v4: uuidv4 } = require("uuid");
-const config = require("../shared/config");
 const auth = require("../shared/auth");
+const cosmos = require("../shared/cosmos");
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = config.cosmos.connectionString;
-    const databaseId = config.cosmos.database;
-    const scheduleContainerId = config.cosmos.containers.schedule;
-    const usersContainerId = config.cosmos.containers.users;
-
     const currentUser = await auth.getUser(context, req);
 
     if (!currentUser) {
@@ -18,16 +12,13 @@ module.exports = async function (context, req) {
     }
 
     const isAdmin = currentUser.roles.includes("admin");
-    currentUser.roles.includes("engineer");
-    if (!connectionString) {
+
+    const scheduleContainer = cosmos.container("schedule");
+    const usersContainer = cosmos.container("users");
+    if (!scheduleContainer || !usersContainer) {
       context.res = { status: 503, body: { error: "Database not configured" } };
       return;
     }
-
-    const client = new CosmosClient(connectionString);
-    const database = client.database(databaseId);
-    const scheduleContainer = database.container(scheduleContainerId);
-    const usersContainer = database.container(usersContainerId);
 
     const method = req.method.toUpperCase();
 

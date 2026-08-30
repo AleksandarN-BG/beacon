@@ -1,13 +1,8 @@
-const { CosmosClient } = require("@azure/cosmos");
-const config = require("../shared/config");
 const auth = require("../shared/auth");
+const cosmos = require("../shared/cosmos");
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = config.cosmos.connectionString;
-    const databaseId = config.cosmos.database;
-    const containerId = config.cosmos.containers.users;
-
     // Get current user using shared auth helper
     const currentUser = await auth.getUser(context, req);
 
@@ -21,17 +16,14 @@ module.exports = async function (context, req) {
 
     const isAdmin = currentUser.roles.includes("admin") || false;
 
-    if (!connectionString) {
+    const container = cosmos.container("users");
+    if (!container) {
       context.res = {
         status: 503,
         body: { error: "Database not configured. Please set COSMOS_CONNECTION_STRING in application settings." }
       };
       return;
     }
-
-    const client = new CosmosClient(connectionString);
-    const database = client.database(databaseId);
-    const container = database.container(containerId);
 
     const method = req.method.toUpperCase();
 

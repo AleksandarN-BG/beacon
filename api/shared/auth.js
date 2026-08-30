@@ -1,10 +1,21 @@
-const { CosmosClient } = require("@azure/cosmos");
 const config = require("./config");
+const cosmos = require("./cosmos");
 
 async function getUser(context, req) {
   let decoded;
   const header = req.headers["x-ms-client-principal"];
   
+  /*
+   * Identity comes from the x-ms-client-principal header, which Static Web Apps
+   * injects after authenticating the caller. It is the only trustworthy source
+   * here: a request body is supplied by the caller, so treating it as identity
+   * lets anyone claim any user id and any role -- including admin, which gates
+   * incident creation and the outbound phone alerts.
+   *
+   * The body fallback survives only for running the Functions host locally
+   * without SWA in front of it, and only when ALLOW_BODY_IDENTITY is explicitly
+   * set. It is off unless someone turns it on.
+   */
   if (header) {
     try {
       const encoded = Buffer.from(header, "base64");
@@ -12,7 +23,11 @@ async function getUser(context, req) {
     } catch (e) {
       context.log.error("Failed to decode client principal header");
     }
-  } else if (req.body && req.body.userId) {
+  } else if (config.dev.allowBodyIdentity && req.body && req.body.userId) {
+    context.log.warn(
+      "Identity taken from the request body: ALLOW_BODY_IDENTITY is set. " +
+        "This is a local-development setting and must not be enabled in Azure."
+    );
     decoded = req.body;
   }
 
@@ -32,12 +47,8 @@ async function getUser(context, req) {
     }
 
     // Otherwise, we check Cosmos DB (SWA Free Plan support)
-    const connectionString = config.cosmos.connectionString;
-    if (!connectionString) return user;
-
-    const client = new CosmosClient(connectionString);
-    const database = client.database(config.cosmos.database);
-    const container = database.container(config.cosmos.containers.users);
+    const container = cosmos.container("users");
+    if (!container) return user;
 
     try {
       const { resource: dbUser } = await container.item(user.id, user.id).read();

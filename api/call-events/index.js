@@ -1,35 +1,36 @@
-const qs = require("querystring");
+/*
+ * Twilio status callbacks: call initiated, ringing, answered, completed, and
+ * the equivalents for SMS delivery.
+ *
+ * Anonymous by necessity -- Twilio cannot authenticate against Azure AD -- so
+ * the signature is what establishes the caller. Unverified, this endpoint is
+ * only a log-spam vector rather than a data risk, but an alerting product that
+ * accepts unauthenticated call history is recording fiction.
+ */
+const webhook = require("../shared/twilio-webhook");
 
 module.exports = async function (context, req) {
-  // Handle call automation events (call connected, call ended, etc.)
-  // Twilio sends status callbacks as POST requests with application/x-www-form-urlencoded
-  let payload = {};
-  const rawBody = req.rawBody || req.body;
-  
-  if (rawBody) {
-    if (typeof rawBody === "string") {
-      payload = qs.parse(rawBody);
-    } else if (Buffer.isBuffer(rawBody)) {
-      payload = qs.parse(rawBody.toString());
-    } else if (typeof rawBody === "object") {
-      payload = rawBody;
-    }
+  const verified = webhook.verify(context, req);
+  if (!verified.ok) {
+    context.log.warn(`[CallEvents] Rejected unverified webhook: ${verified.reason}`);
+    context.res = { status: 403, body: { error: "Invalid webhook signature" } };
+    return;
   }
-  
-  // Twilio status callback parameters: CallSid, CallStatus, To, From, etc.
-  const callSid = payload.CallSid;
-  const callStatus = payload.CallStatus;
 
-  if (callSid) {
-    context.log(`Twilio Call Event: CallSid=${callSid}, Status=${callStatus}`);
+  const payload = webhook.bodyParams(req);
+  const { CallSid, CallStatus, MessageSid, MessageStatus } = payload;
+
+  if (CallSid) {
+    context.log(`[CallEvents] Call ${CallSid}: ${CallStatus}`);
+  } else if (MessageSid) {
+    context.log(`[CallEvents] Message ${MessageSid}: ${MessageStatus}`);
   } else {
-    context.log("Call event received with no CallSid:", JSON.stringify(payload));
+    context.log.warn("[CallEvents] Verified webhook carried no CallSid or MessageSid");
   }
 
   context.res = {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: { received: true }
+    headers: { "Content-Type": "application/json" },
+    body: { received: true },
   };
 };
-

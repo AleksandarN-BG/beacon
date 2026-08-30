@@ -1,6 +1,5 @@
-const { CosmosClient } = require("@azure/cosmos");
-const config = require("../shared/config");
 const auth = require("../shared/auth");
+const cosmos = require("../shared/cosmos");
 
 module.exports = async function (context, req) {
   const currentUser = await auth.getUser(context, req);
@@ -9,8 +8,11 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const client = new CosmosClient(config.cosmos.connectionString);
-  const container = client.database(config.cosmos.database).container(config.cosmos.containers.users);
+  const container = cosmos.container("users");
+  if (!container) {
+    context.res = { status: 503, body: { error: "Database not configured" } };
+    return;
+  }
 
   if (req.method === "GET") {
     const { resource: user } = await container.item(currentUser.id, currentUser.id).read();

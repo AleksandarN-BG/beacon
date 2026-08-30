@@ -1,105 +1,68 @@
-const twilio = require('twilio');
-const config = require("../shared/config");
+/*
+ * Manually ring the on-call engineer -- the voice equivalent of alert-sms, and
+ * the same reasoning applies: admin or engineer only, and the number comes from
+ * the schedule rather than from the caller.
+ *
+ * See alert-sms for what this replaced.
+ */
 const auth = require("../shared/auth");
 const logger = require("../shared/logger");
+const notify = require("../shared/notify");
+const oncall = require("../shared/oncall");
 
 module.exports = async function (context, req) {
   try {
-    // Authenticate user - any authenticated user can trigger alerts
     const currentUser = await auth.getUser(context, req);
     if (!currentUser) {
+      context.res = { status: 401, body: { error: "Authentication required" } };
+      return;
+    }
+
+    const roles = currentUser.roles || [];
+    if (!roles.includes("admin") && !roles.includes("engineer")) {
+      await logger.logSystemEvent(
+        context,
+        "warn",
+        `Rejected manual escalation call from ${currentUser.id} (roles: ${roles.join(", ") || "none"})`,
+      );
       context.res = {
-        status: 401,
-        body: { error: "Authentication required" }
+        status: 403,
+        body: { error: "Permission denied. Only admins and engineers can place alert calls." },
       };
       return;
     }
 
-    const accountSid = config.twilio.accountSid;
-    const authToken = config.twilio.authToken;
-    const fromNumber = config.twilio.phoneNumber;
+    if (!notify.isConfigured()) {
+      await logger.logSystemEvent(context, "error", "Twilio is not configured");
+      context.res = { status: 500, body: { error: "Twilio not configured" } };
+      return;
+    }
 
-    if (!accountSid || !authToken || !fromNumber) {
-      await logger.logSystemEvent(context, 'error', "Twilio not configured in application settings");
+    // An acknowledgement has to attach to something, so unlike the SMS path
+    // this one genuinely needs an incident id from the caller.
+    const { service = "Manual test", incidentId } = req.body || {};
+    if (!incidentId) {
+      context.res = { status: 400, body: { error: "Missing required field: incidentId" } };
+      return;
+    }
+
+    const engineer = await oncall.currentOnCall(context);
+    if (!engineer?.phone) {
       context.res = {
-        status: 500,
-        body: { error: "Twilio not configured" }
+        status: 409,
+        body: { error: "Nobody is currently on call, or the on-call engineer has no phone number set." },
       };
       return;
     }
 
-    const { phone, service, incidentId } = req.body;
+    const result = await notify.placeCall(context, { to: engineer.phone, service, incidentId });
 
-    if (!phone || !service || !incidentId) {
-      context.res = {
-        status: 400,
-        body: { error: "Missing required fields: phone, service, incidentId" }
-      };
-      return;
-    }
-
-    await logger.logSystemEvent(context, 'info', `Initiating escalation call for ${service} to ${phone}`);
-
-    const client = twilio(accountSid, authToken);
-
-    // CRITICAL FIX: Use Static Web App URL for Twilio webhooks
-    // This ensures webhooks go through SWA routing (which allows anonymous access)
-    // instead of hitting the Function App directly (which requires authentication)
-    const staticWebAppUrl = config.system.staticWebAppUrl || process.env.STATIC_WEB_APP_URL;
-
-    if (!staticWebAppUrl) {
-      await logger.logSystemEvent(context, 'error', 'STATIC_WEB_APP_URL not configured - Twilio webhooks will fail with 401');
-      context.res = {
-        status: 500,
-        body: { error: "STATIC_WEB_APP_URL environment variable not set. Please configure it in Azure." }
-      };
-      return;
-    }
-
-    const callbackBaseUrl = staticWebAppUrl;
-
-    // Construct the message that will be spoken to the user
-    const message = `Critical Beacon Alert: ${service} is experiencing issues. Press 1 to acknowledge this incident.`;
-
-    // The URL for Twilio to fetch TwiML from. We pass the incidentId and the message.
-    const twimlUrl = new URL(`${callbackBaseUrl}/api/voice-twiml`);
-    twimlUrl.searchParams.append('incidentId', incidentId);
-    twimlUrl.searchParams.append('message', message);
-
-    await logger.logSystemEvent(context, 'info', `Using webhook URL: ${twimlUrl.toString()}`);
-
-    try {
-      const call = await client.calls.create({
-        url: twimlUrl.toString(), // Use URL to fetch TwiML
-        to: phone,
-        from: fromNumber,
-        statusCallback: `${callbackBaseUrl}/api/call-events`,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-      });
-
-      await logger.logSystemEvent(context, 'info', `Call initiated successfully: ${call.sid}`);
-
-      context.res = {
-        status: 200,
-        body: {
-          success: true,
-          callSid: call.sid,
-          webhookUrl: twimlUrl.toString() // Include for debugging
-        }
-      };
-    } catch (err) {
-      await logger.logSystemEvent(context, 'error', `Twilio API error during call creation: ${err.message}`, err);
-      throw err;
-    }
-  } catch (error) {
-    context.log.error(`Error initiating call: ${error.message}`);
-    // Return error details in the response for browser debugging
     context.res = {
-      status: 500,
-      body: {
-        error: error.message,
-        stack: error.stack // Include stack trace for debugging
-      }
+      status: 200,
+      body: { success: true, callSid: result.sid, calling: engineer.name },
     };
+  } catch (error) {
+    context.log.error(`[AlertCall] ${error.message}`);
+    context.res = { status: 500, body: { error: error.message } };
   }
 };

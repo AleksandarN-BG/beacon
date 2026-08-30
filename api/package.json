@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Azure Functions API for Beacon",
   "scripts": {
-    "test": "echo \"No tests yet\""
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@azure/cosmos": "^4.0.0",

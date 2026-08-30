@@ -1,17 +1,12 @@
-const { CosmosClient } = require("@azure/cosmos");
 const { v4: uuidv4 } = require("uuid");
-const config = require("../shared/config");
 const auth = require("../shared/auth");
+const cosmos = require("../shared/cosmos");
 const logger = require("../shared/logger");
-const alertSMS = require("../alert-sms");
-const alertCall = require("../alert-call");
+const notify = require("../shared/notify");
+const oncall = require("../shared/oncall");
 
 module.exports = async function (context, req) {
   try {
-    const connectionString = config.cosmos.connectionString;
-    const databaseId = config.cosmos.database;
-    const containerId = config.cosmos.containers.incidents;
-
     // Get current user using shared auth helper
     const currentUser = await auth.getUser(context, req);
 
@@ -26,7 +21,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    if (!connectionString) {
+    if (!cosmos.isConfigured()) {
       // Return mock data if database not configured
       if (req.method === "GET") {
         context.res = {
@@ -43,9 +38,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const client = new CosmosClient(connectionString);
-    const database = client.database(databaseId);
-    const container = database.container(containerId);
+    const container = cosmos.container("incidents");
 
     const method = req.method.toUpperCase();
 
@@ -91,7 +84,7 @@ module.exports = async function (context, req) {
         const { resource: created } = await container.items.create(newIncident);
 
         // Trigger alerts based on severity AFTER creating the incident
-        triggerAlerts(context, created, currentUser).catch(err => {
+        triggerAlerts(context, created).catch(err => {
           context.log.error(`Alert triggering failed: ${err.message}`);
         });
 
@@ -155,7 +148,7 @@ module.exports = async function (context, req) {
         };
 
         // Look up user's actual name from database
-        const usersContainer = database.container(config.cosmos.containers.users);
+        const usersContainer = cosmos.container("users");
         const { resources: users } = await usersContainer.items
             .query({
               query: "SELECT c.id, c.name FROM c WHERE c.id = @userId",
@@ -220,111 +213,63 @@ module.exports = async function (context, req) {
   }
 };
 
-async function triggerAlerts(context, incident, currentUser) {
-  // Get current on-call person
-  const connectionString = config.cosmos.connectionString;
-  if (!connectionString) {
-    await logger.logSystemEvent(context, 'warn', 'Cannot trigger alerts: Database not configured');
+async function triggerAlerts(context, incident) {
+  if (!cosmos.isConfigured()) {
+    await logger.logSystemEvent(context, "warn", "Cannot trigger alerts: database not configured");
     return;
   }
 
   try {
-    const client = new CosmosClient(connectionString);
-    const database = client.database(config.cosmos.database);
-    const scheduleContainer = database.container(config.cosmos.containers.schedule);
-    const usersContainer = database.container(config.cosmos.containers.users);
+    const engineer = await oncall.currentOnCall(context);
 
-    const now = new Date().toISOString();
-    const { resources: shifts } = await scheduleContainer.items
-        .query({
-          query: "SELECT * FROM c WHERE c.startTime <= @now AND c.endTime >= @now",
-          parameters: [{ name: "@now", value: now }]
-        })
-        .fetchAll();
-
-    if (shifts.length === 0) {
-      await logger.logSystemEvent(context, 'warn', 'No one currently on-call - alerts not sent');
+    if (!engineer) {
+      await logger.logSystemEvent(context, "warn", "No one currently on-call - alerts not sent");
       return;
     }
 
-    const shift = shifts[0];
-
-    // Look up the user info just like schedule endpoint does
-    const { resources: users } = await usersContainer.items.query("SELECT c.id, c.name, c.phone FROM c").fetchAll();
-    const userMap = new Map(users.map(u => [u.id, u]));
-    const onCall = userMap.get(shift.userId);
-
-    if (!onCall) {
-      await logger.logSystemEvent(context, 'warn', `User ${shift.userId} not found`);
+    if (!engineer.phone) {
+      await logger.logSystemEvent(
+        context,
+        "warn",
+        `On-call engineer ${engineer.name} has no phone number - alerts not sent`,
+      );
       return;
     }
 
-    // NEW 3-LEVEL SEVERITY SYSTEM:
-    // Low: Just log (no alerts)
-    // Medium: Send SMS
-    // High: Send SMS + Make call
+    /*
+     * Severity decides how loudly we page:
+     *   low     record it only
+     *   medium  text
+     *   high    text and ring
+     *
+     * These call shared/notify directly. The previous version invoked the
+     * alert-sms and alert-call HTTP handlers in-process with a synthetic
+     * request, and reassigned auth.getUser to a stub for the duration to get
+     * past their authentication -- mutating a module every concurrent
+     * invocation on the worker shares.
+     */
+    const service = incident.title;
 
     switch (incident.severity) {
       case "low":
-        // Just log - no alerts
-        await logger.logSystemEvent(context, 'info', `Low severity incident logged: ${incident.title}`);
+        await logger.logSystemEvent(context, "info", `Low severity incident logged: ${service}`);
         break;
 
       case "medium":
-        // Send SMS only using existing alert-sms endpoint
-        await logger.logSystemEvent(context, 'info', `Medium severity - sending SMS to ${onCall.name}`);
-        await callAlertSMS(context, onCall.phone, incident.title, currentUser);
+        await logger.logSystemEvent(context, "info", `Medium severity - texting ${engineer.name}`);
+        await notify.sendSms(context, { to: engineer.phone, service, status: "down" });
         break;
 
       case "high":
-        // Send SMS and make call using existing endpoints
-        await logger.logSystemEvent(context, 'info', `High severity - sending SMS and calling ${onCall.name}`);
-        await callAlertSMS(context, onCall.phone, incident.title, currentUser);
-        await callAlertCall(context, onCall.phone, incident.title, incident.id, currentUser);
+        await logger.logSystemEvent(context, "info", `High severity - texting and calling ${engineer.name}`);
+        await notify.sendSms(context, { to: engineer.phone, service, status: "down" });
+        await notify.placeCall(context, { to: engineer.phone, service, incidentId: incident.id });
         break;
 
       default:
-        await logger.logSystemEvent(context, 'warn', `Unknown severity: ${incident.severity}`);
+        await logger.logSystemEvent(context, "warn", `Unknown severity: ${incident.severity}`);
     }
   } catch (err) {
-    await logger.logSystemEvent(context, 'error', `Failed to trigger alerts: ${err.message}`, err);
-  }
-}
-
-// Call the existing alert-sms module
-async function callAlertSMS(context, phone, service, currentUser) {
-  const mockReq = {
-    method: 'POST',
-    body: { phone, service, status: 'down' },
-    headers: context.req.headers || {}
-  };
-
-  // Temporarily override auth to return current user
-  const originalGetUser = auth.getUser;
-  auth.getUser = async () => currentUser;
-
-  try {
-    await alertSMS(context, mockReq);
-  } finally {
-    auth.getUser = originalGetUser;
-  }
-}
-
-// Call the existing alert-call module
-async function callAlertCall(context, phone, service, incidentId, currentUser) {
-  const mockReq = {
-    method: 'POST',
-    body: { phone, service, incidentId },
-    headers: context.req.headers || {}
-  };
-
-  // Temporarily override auth to return current user
-  const originalGetUser = auth.getUser;
-  auth.getUser = async () => currentUser;
-
-  try {
-    await alertCall(context, mockReq);
-  } finally {
-    auth.getUser = originalGetUser;
+    await logger.logSystemEvent(context, "error", `Failed to trigger alerts: ${err.message}`, err);
   }
 }
