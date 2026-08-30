@@ -1,83 +1,129 @@
 {
-  "auth": {
-    "rolesSource": "/api/get-roles",
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
-          "clientIdSettingName": "AAD_CLIENT_ID",
-          "clientSecretSettingName": "AAD_CLIENT_SECRET"
-        }
-      }
-    }
-  },
   "routes": [
     {
+      "route": "/.auth/login/github",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/google",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/twitter",
+      "statusCode": 404
+    },
+    {
       "route": "/api/get-roles",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": [
+        "anonymous"
+      ]
     },
     {
       "route": "/api/incidents",
-      "methods": ["GET", "POST"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/incidents",
-      "methods": ["PUT"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "PUT"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/incidents",
-      "methods": ["DELETE"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "DELETE"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/schedule",
-      "methods": ["GET"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "GET"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/schedule",
-      "methods": ["POST", "DELETE"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/alert-sms",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/alert-call",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/users",
-      "methods": ["GET"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "GET"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/users",
-      "methods": ["PUT"],
-      "allowedRoles": ["authenticated"]
+      "methods": [
+        "PUT"
+      ],
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/voice-twiml",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": [
+        "anonymous"
+      ]
     },
     {
       "route": "/api/call-events",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": [
+        "anonymous"
+      ]
     },
     {
       "route": "/api/debug",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/logs",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/api/*",
-      "allowedRoles": ["authenticated"]
+      "allowedRoles": [
+        "authenticated"
+      ]
     },
     {
       "route": "/login",
@@ -90,7 +136,14 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/*", "/.auth/*", "*.css", "*.js", "*.svg", "*.ico"]
+    "exclude": [
+      "/api/*",
+      "/.auth/*",
+      "*.css",
+      "*.js",
+      "*.svg",
+      "*.ico"
+    ]
   },
   "responseOverrides": {
     "401": {
@@ -102,4 +155,3 @@
     }
   }
 }
-

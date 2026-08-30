@@ -12,6 +12,22 @@ module.exports = async function (context, req) {
     }
 
     const isAdmin = currentUser.roles.includes("admin");
+    const isEngineer = currentUser.roles.includes("engineer");
+
+    /*
+     * The schedule decides who gets paged, and GET returns every engineer's
+     * name and phone number. Neither belongs to anyone who merely signed in --
+     * and since POST only checked that a non-admin was scheduling themselves, a
+     * plain user could put themselves on call, set a phone number through
+     * /api/account, and start receiving this organisation's incident alerts.
+     */
+    if (!isAdmin && !isEngineer) {
+      context.res = {
+        status: 403,
+        body: { error: "Permission denied. Only admins and engineers can view or change the schedule." }
+      };
+      return;
+    }
 
     const scheduleContainer = cosmos.container("schedule");
     const usersContainer = cosmos.container("users");

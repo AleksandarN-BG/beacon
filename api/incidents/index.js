@@ -21,6 +21,22 @@ module.exports = async function (context, req) {
       return;
     }
 
+    /*
+     * Every operation on an incident is an operational action, and creating a
+     * high-severity one texts and rings the on-call engineer. Being signed in
+     * is not sufficient: Static Web Apps' pre-configured providers let anyone
+     * with a Microsoft, GitHub or Google account reach the `authenticated`
+     * role, so POST was an unauthenticated way to make this project's Twilio
+     * account dial a phone. DELETE additionally requires admin, below.
+     */
+    if (!isAdmin && !isEngineer) {
+      context.res = {
+        status: 403,
+        body: { error: "Permission denied. Only admins and engineers can manage incidents." }
+      };
+      return;
+    }
+
     if (!cosmos.isConfigured()) {
       // Return mock data if database not configured
       if (req.method === "GET") {
@@ -52,7 +68,9 @@ module.exports = async function (context, req) {
       }
 
       case "POST": {
-        const { title, description, severity, reportedBy } = req.body;
+        // reportedBy is deliberately not read from the body: attribution comes
+        // from the authenticated caller, not from what they claim to be.
+        const { title, description, severity } = req.body;
 
         if (!title || !severity) {
           context.res = {
@@ -68,7 +86,7 @@ module.exports = async function (context, req) {
           description: description || "",
           severity,
           status: "open",
-          reportedBy: reportedBy || currentUser?.name || "Unknown",
+          reportedBy: currentUser?.name || currentUser?.id || "Unknown",
           reportedById: currentUser?.id,
           assignedTo: null,
           assignedToId: null,

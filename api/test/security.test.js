@@ -38,7 +38,15 @@ cosmos.container = (name) => ({
     read: async () => ({ resource: name === "incidents" ? { id: "INC-1", title: "db down", status: "open" } : null }),
     replace: async (doc) => { written.push(doc); return { resource: doc }; },
   }),
-  items: { create: async () => ({}), query: () => ({ fetchAll: async () => ({ resources: [] }) }) },
+  items: {
+    // auth.js auto-provisions a record for an unknown caller, so writes to the
+    // users container are not what any of these assertions are about.
+    create: async (doc) => {
+      if (name !== "users") written.push(doc);
+      return { resource: doc };
+    },
+    query: () => ({ fetchAll: async () => ({ resources: [] }) }),
+  },
 });
 oncall.currentOnCall = async () => ON_CALL;
 notify.sendSms = async (_c, a) => { dispatched.push({ kind: "sms", ...a }); return { sid: "SM1", status: "queued" }; };
@@ -49,6 +57,8 @@ const voiceTwiml = require("../voice-twiml");
 const callEvents = require("../call-events");
 const alertCall = require("../alert-call");
 const alertSms = require("../alert-sms");
+const incidents = require("../incidents");
+const schedule = require("../schedule");
 
 // --- helpers --------------------------------------------------------------
 
@@ -181,4 +191,79 @@ test("identity cannot be taken from the request body", async () => {
     body: { userId: "attacker", userRoles: ["admin"] },
   });
   assert.equal(forged, null, "only the platform-injected header establishes identity");
+});
+
+// --- operational endpoints ------------------------------------------------
+//
+// Being signed in is not a permission here. The pre-configured Static Web Apps
+// providers let anyone with a Microsoft, GitHub or Google account reach the
+// `authenticated` role, so every route that does something operational has to
+// ask for admin or engineer explicitly.
+
+const signedIn = (roles, extra = {}) => ({
+  method: "GET",
+  query: {},
+  headers: { "x-ms-client-principal": clientPrincipal(roles) },
+  ...extra,
+});
+
+test("incidents refuses every method to a merely authenticated caller", async () => {
+  for (const method of ["GET", "POST", "PUT", "DELETE"]) {
+    const c = ctx();
+    await incidents(c, signedIn(["authenticated"], {
+      method,
+      body: { title: "fake", severity: "high" },
+    }));
+
+    assert.equal(c.res.status, 403, `${method} must be refused`);
+    assert.equal(written.length, 0, `${method} must not write`);
+    assert.equal(dispatched.length, 0, `${method} must not page anyone`);
+  }
+});
+
+test("posting a high-severity incident used to page on-call without any role", async () => {
+  // The unguarded POST was a way to make this project's Twilio account text
+  // and ring a phone with nothing but a free Google sign-in.
+  const c = ctx();
+  await incidents(c, signedIn(["authenticated"], {
+    method: "POST",
+    body: { title: "spam", severity: "high" },
+  }));
+
+  assert.equal(c.res.status, 403);
+  assert.equal(dispatched.length, 0, "no SMS, no call");
+});
+
+test("an engineer can report an incident, and cannot fake who reported it", async () => {
+  const c = ctx();
+  await incidents(c, signedIn(["engineer"], {
+    method: "POST",
+    body: { title: "db down", severity: "low", reportedBy: "the CEO" },
+  }));
+
+  assert.equal(c.res.status, 201);
+  assert.equal(written.length, 1);
+  assert.notEqual(written[0].reportedBy, "the CEO", "attribution comes from the caller, not the body");
+  assert.equal(written[0].reportedById, "u9");
+});
+
+test("schedule refuses a merely authenticated caller, in both directions", async () => {
+  // GET returned every engineer's name and phone number. POST let a plain user
+  // schedule themselves, which is how they would start receiving the alerts.
+  for (const method of ["GET", "POST", "DELETE"]) {
+    const c = ctx();
+    await schedule(c, signedIn(["authenticated"], {
+      method,
+      body: { userId: "u9", startTime: "2026-01-01T00:00:00Z", endTime: "2030-01-01T00:00:00Z" },
+    }));
+
+    assert.equal(c.res.status, 403, `${method} must be refused`);
+    assert.equal(written.length, 0);
+  }
+});
+
+test("an engineer can read the schedule", async () => {
+  const c = ctx();
+  await schedule(c, signedIn(["engineer"], { method: "GET" }));
+  assert.equal(c.res.status, 200);
 });
